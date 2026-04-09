@@ -1,0 +1,132 @@
+@startuml ViewLayoutRenderCanvasSequence
+title TerminalUI View / Modifier / LayoutNode / Render / Canvas Sequence
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+hide footbox
+
+actor User
+participant TerminalApp
+participant "View" as View
+participant "ModifiedContent" as Modified
+participant "ViewModifier" as Modifier
+participant "_LayoutNodeProducing" as Producer
+participant "_LayoutNode" as LayoutNode
+participant "_EnvironmentNode" as EnvironmentNode
+participant "_KeyPressNode" as KeyNode
+participant Render
+participant Canvas
+
+User -> TerminalApp : render()
+activate TerminalApp
+
+TerminalApp -> Canvas : init(width, height)
+Canvas --> TerminalApp : canvas
+
+TerminalApp -> View : _makeLayoutNode()
+activate View
+
+alt primitive View (Text or layout primitive)
+    View -> Producer : _makeLayoutNode()
+    activate Producer
+    Producer -> LayoutNode : create node and child nodes
+    LayoutNode --> Producer : root
+    Producer --> View : root
+    deactivate Producer
+else generic Stack<Content: View>
+    View -> View : content._makeLayoutNodes()
+    View -> LayoutNode : create stack node with child nodes
+    LayoutNode --> View : root
+else modified View
+    View -> Modified : _makeLayoutNode()
+    activate Modified
+    Modified -> Modified : _ViewModifier_Content(content)
+    Modified -> Modifier : body(content: content proxy)
+    activate Modifier
+    Modifier --> Modified : primitive/body View
+    deactivate Modifier
+    Modified -> Producer : _makeLayoutNode()
+    activate Producer
+    Producer -> LayoutNode : create wrapper node tree
+    LayoutNode --> Producer : root
+    Producer --> Modified : root
+    deactivate Producer
+    Modified --> View : root
+    deactivate Modified
+else user-defined composite View
+    View -> View : evaluate body
+    View -> View : body._makeLayoutNode()
+end
+
+View --> TerminalApp : root _LayoutNode
+deactivate View
+
+TerminalApp -> Render : render(root, bounds, canvas)
+activate Render
+
+Render -> LayoutNode : layout(in: bounds)
+activate LayoutNode
+LayoutNode -> LayoutNode : measure and place children
+LayoutNode --> Render : layout complete
+deactivate LayoutNode
+
+loop depth-first draw traversal
+    Render -> LayoutNode : inspect node
+    activate LayoutNode
+
+    opt node is _EnvironmentNode
+        Render -> EnvironmentNode : applyingEnvironment(to: parent)
+        activate EnvironmentNode
+        EnvironmentNode -> EnvironmentNode : copy values; run update
+        EnvironmentNode --> Render : subtree environment
+        deactivate EnvironmentNode
+    end
+
+    opt node conforms to _RenderableLayoutNode
+        Render -> LayoutNode : draw(to: canvas, environment)
+        LayoutNode -> Canvas : update grid
+    end
+
+    opt node is _ContainerLayoutNode
+        Render -> LayoutNode : children
+        LayoutNode --> Render : child nodes
+    end
+    deactivate LayoutNode
+end
+
+Render --> TerminalApp : rendering complete
+deactivate Render
+
+TerminalApp --> User : Canvas
+deactivate TerminalApp
+
+... interactive TerminalApp.run() ...
+User -> TerminalApp : terminal key bytes
+TerminalApp -> TerminalApp : decode KeyPress
+TerminalApp -> KeyNode : depth-first handle(event)
+alt handled
+    KeyNode --> TerminalApp : .handled
+    TerminalApp -> Render : rebuild and render View tree
+else ignored
+    KeyNode --> TerminalApp : .ignored (bubble outward)
+end
+
+note over View, Producer
+  Composite Views recursively expand body.
+  Primitive Views implement _LayoutNodeProducing.
+  Generic Stack Content is preserved; parameter-pack TupleView or
+  _ArrayView<Content> expands loops into sibling nodes.
+  ModifiedContent expands ViewModifier.body first.
+end note
+
+note over EnvironmentNode, Render
+  EnvironmentValues are copied at the environment node
+  and passed only to that node's descendants.
+end note
+
+note over Render, Canvas
+  Render lays out once, then traverses
+  _ContainerLayoutNode.children depth-first.
+end note
+
+@enduml

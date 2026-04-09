@@ -1,0 +1,209 @@
+@startuml ViewLayoutRenderCanvas
+title TerminalUI View / Modifier / LayoutNode / Render / Canvas Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+left to right direction
+
+package "Public View API" {
+    interface View <<protocol>> {
+        associatedtype Body: View
+        body: Body
+    }
+
+    interface ViewModifier <<protocol>> {
+        associatedtype Body: View
+        associatedtype Content
+        body(content: Content): Body
+    }
+
+    class "ModifiedContent<Content, Modifier>" as ModifiedContent {
+        + content: Content
+        + modifier: Modifier
+    }
+
+    class "HStack<Content: View>" as HStack {
+        content: Content
+        alignment: VerticalAlignment
+    }
+
+    class "VStack<Content: View>" as VStack {
+        content: Content
+        alignment: HorizontalAlignment
+    }
+
+    class "ZStack<Content: View>" as ZStack {
+        content: Content
+        alignment: AlignmentEdge
+    }
+
+    class TerminalApp {
+        - width: Int
+        - height: Int
+        - root: any View
+        + render(): Canvas
+    }
+
+    class Canvas {
+        + width: Int
+        + height: Int
+        ~ grid: [[_Cell]]
+        + draw(view: any View, in rect: Rect)
+        + drawText(x: Int, y: Int, text: String, foreground: Color, background: Color?)
+        + output(colorSupport: TerminalColorSupport): String
+        + flush()
+    }
+
+    class KeyPress {
+        key: Key
+        characters: String
+        modifiers: Modifiers
+    }
+}
+
+package "View to Layout Adapter" {
+    interface _LayoutNodeProducing <<protocol>> {
+        _makeLayoutNode(): any _LayoutNode
+    }
+
+    class _PaddingLayoutView <<primitive View>>
+    class _FrameLayoutView <<primitive View>>
+    class _BorderContent <<primitive View>>
+    class _EnvironmentWritingContent <<primitive View>>
+    class _KeyPressContent <<primitive View>>
+    class "TupleView<each Content: View>" as TupleView <<parameter pack>>
+    class "_ArrayView<Content: View>" as ArrayView <<dynamic view collection>>
+}
+
+package "Layout Tree" {
+    interface _LayoutNode <<protocol>> {
+        measure(proposed: ProposedSize): Size
+        layout(in rect: Rect)
+    }
+
+    interface _RenderableLayoutNode <<protocol>> {
+        frame: Rect
+        draw(to canvas: Canvas, environment: EnvironmentValues)
+    }
+
+    class _ContainerLayoutNode <<base class>> {
+        children: [any _LayoutNode]
+        frame: Rect
+        + measure(proposed: ProposedSize): Size
+        + layout(in rect: Rect)
+        + measureSizes(proposed: ProposedSize): [Size]
+    }
+
+    class _UnaryLayoutNode <<base class>> {
+        child: any _LayoutNode
+    }
+
+    class _HStackLayoutNode
+    class _VStackLayoutNode
+    class _ZStackLayoutNode
+    class _PaddingLayoutNode <<wrapper>>
+    class _FrameLayoutNode <<wrapper>>
+    class _BorderLayoutNode <<wrapper, renderable>>
+
+    class _EnvironmentNode <<wrapper>> {
+        update: (inout EnvironmentValues) -> Void
+        applyingEnvironment(to environment: EnvironmentValues): EnvironmentValues
+    }
+
+    class _KeyPressNode <<wrapper>> {
+        keys: Set<KeyPress.Key>?
+        handle(event: KeyPress): KeyPress.Result
+    }
+
+    class _LeafNode <<leaf>> {
+        intrinsicSize: Size
+        frame: Rect
+        drawBody: (Canvas, Rect, EnvironmentValues) -> Void
+    }
+}
+
+package "Rendering" {
+    enum Render {
+        + render(root: any _LayoutNode, in bounds: Rect, to canvas: Canvas)
+        - draw(node: any _LayoutNode, to canvas: Canvas, environment: EnvironmentValues)
+    }
+}
+
+View <|.. ModifiedContent
+View <|.. HStack
+View <|.. VStack
+View <|.. ZStack
+View <|.. TupleView
+View <|.. ArrayView
+ViewModifier <-- ModifiedContent : modifier
+View <-- ModifiedContent : content
+View <|.. _PaddingLayoutView
+View <|.. _FrameLayoutView
+View <|.. _EnvironmentWritingContent
+_LayoutNodeProducing <|.. _PaddingLayoutView
+_LayoutNodeProducing <|.. _FrameLayoutView
+_LayoutNodeProducing <|.. _EnvironmentWritingContent
+
+_LayoutNode <|.. _RenderableLayoutNode
+_LayoutNode <|.. _ContainerLayoutNode
+_ContainerLayoutNode <|-- _UnaryLayoutNode
+_ContainerLayoutNode <|-- _HStackLayoutNode
+_ContainerLayoutNode <|-- _VStackLayoutNode
+_ContainerLayoutNode <|-- _ZStackLayoutNode
+_UnaryLayoutNode <|-- _PaddingLayoutNode
+_UnaryLayoutNode <|-- _FrameLayoutNode
+_UnaryLayoutNode <|-- _BorderLayoutNode
+_UnaryLayoutNode <|-- _EnvironmentNode
+_UnaryLayoutNode <|-- _KeyPressNode
+_RenderableLayoutNode <|.. _LeafNode
+_RenderableLayoutNode <|.. _BorderLayoutNode
+
+TerminalApp --> View : root
+View --> _LayoutNodeProducing : primitive bridge
+ModifiedContent --> ViewModifier : body(_ViewModifier_Content(content))
+_LayoutNodeProducing --> _LayoutNode : creates
+HStack ..> _HStackLayoutNode : creates
+VStack ..> _VStackLayoutNode : creates
+ZStack ..> _ZStackLayoutNode : creates
+TupleView --> _LayoutNode : expands children
+_PaddingLayoutView ..> _PaddingLayoutNode : creates
+_FrameLayoutView ..> _FrameLayoutNode : creates
+_BorderContent ..> _BorderLayoutNode : creates
+_EnvironmentWritingContent ..> _EnvironmentNode : creates
+_KeyPressContent ..> _KeyPressNode : creates
+TerminalApp --> KeyPress : send / run
+Render --> _LayoutNode : layout / traverse
+Render ..> _EnvironmentNode : resolve subtree environment
+_RenderableLayoutNode ..> Canvas : draw(to:)
+TerminalApp --> Render : render
+Render --> Canvas : grid output
+
+note right of ModifiedContent
+  ModifiedContent is a primitive View (Body == Never).
+  Its adapter wraps content in _ViewModifier_Content,
+  calls modifier.body(content:), then creates the node tree.
+end note
+
+note right of _ContainerLayoutNode
+  children lives on the concrete base class.
+  Render discovers containers by casting to
+  _ContainerLayoutNode during depth-first traversal.
+end note
+
+note right of _EnvironmentNode
+  Layout-transparent unary node.
+  Render copies and updates EnvironmentValues
+  before drawing/traversing this subtree.
+end note
+
+note bottom of Render
+  Pipeline:
+  View / ViewModifier expansion
+  -> _makeLayoutNode()
+  -> layout tree
+  -> depth-first draw
+  -> Canvas grid/output
+end note
+
+@enduml

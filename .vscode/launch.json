@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ShengjiCmd}",
+            "name": "Debug ShengjiCmd",
+            "target": "ShengjiCmd",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ShengjiCmd"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ShengjiCmd}",
+            "name": "Release ShengjiCmd",
+            "target": "ShengjiCmd",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ShengjiCmd"
+        }
+    ]
+}
