@@ -536,6 +536,7 @@ private struct ObservatoryDemo: View {
                                 onCommit: sendChatMessage
                             )
                             .focused($focusedField, equals: .chatMessage)
+                            Spacer(width: 1)
                         }
                         .padding(horizontal: 1)
                         .frame(height: 3, alignment: .center)

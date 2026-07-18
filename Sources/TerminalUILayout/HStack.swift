@@ -35,7 +35,12 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
     package override func layout(in rect: Rect) {
         super.layout(in: rect)
         var sizes = minimumSizes(proposed: ProposedSize(width: rect.w, height: rect.h))
-        distributeExtraWidth(rect.w - sizes.reduce(0) { $0 + $1.w }, into: &sizes)
+        let remainingWidth = rect.w - sizes.reduce(0) { $0 + $1.w }
+        if remainingWidth >= 0 {
+            distributeExtraWidth(remainingWidth, into: &sizes)
+        } else {
+            shrinkOverflow(-remainingWidth, in: &sizes)
+        }
         var x = rect.x
         for (i, size) in sizes.enumerated() {
             let assignedWidth = min(size.w, max(0, rect.maxX - x))
@@ -76,6 +81,28 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
                 w: sizes[index].w + base + (offset >= flexibleIndices.count - remainder ? 1 : 0),
                 h: sizes[index].h
             )
+        }
+    }
+
+    private func shrinkOverflow(_ overflow: Int, in sizes: inout [Size]) {
+        var remaining = overflow
+        let flexibleIndices = children.indices.filter {
+            (children[$0] as? _FlexibleLayoutNode)?.expandsHorizontally == true
+        }
+
+        shrink(indices: flexibleIndices, remaining: &remaining, sizes: &sizes)
+        guard remaining > 0 else { return }
+
+        // 如果固定内容本身也超过容器宽度，只能从前向后继续压缩；这和
+        // VStack 的溢出策略一致，尽量为靠后的状态/边距内容保留空间。
+        shrink(indices: Array(children.indices), remaining: &remaining, sizes: &sizes)
+    }
+
+    private func shrink(indices: [Int], remaining: inout Int, sizes: inout [Size]) {
+        for index in indices where remaining > 0 {
+            let reduction = min(sizes[index].w, remaining)
+            sizes[index] = Size(w: sizes[index].w - reduction, h: sizes[index].h)
+            remaining -= reduction
         }
     }
 }

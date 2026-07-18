@@ -139,7 +139,9 @@ private extension Unicode.Scalar {
             return 0
         }
 
-        // East Asian Wide/Fullwidth 字符和 emoji 通常在终端中占 2 格。
+        // East Asian Wide/Fullwidth 字符和默认 emoji 通常在终端中占 2 格。
+        // Dingbats/Misc Symbols 里有不少默认文本样式符号，例如 "✓"。没有
+        // U+FE0F emoji 变体选择符时按窄字符处理，避免标题/边框宽度多算一格。
         if isWideEastAsianScalar || isEmojiScalar {
             return 2
         }
@@ -175,8 +177,7 @@ private extension Unicode.Scalar {
     /// 数据库级别的精确性。
     var isEmojiScalar: Bool {
         switch value {
-        case 0x1F000...0x1FAFF,
-             0x2600...0x27BF:
+        case 0x1F000...0x1FAFF:
             return true
         default:
             return false

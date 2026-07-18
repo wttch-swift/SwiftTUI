@@ -151,6 +151,12 @@ private final class _TextFieldLayoutNode: _RenderReusableLayoutNode, _FocusableL
 
     func draw(to canvas: Canvas, environment: EnvironmentValues) {
         guard frame.w > 0, frame.h > 0 else { return }
+        canvas.withClip(frame) {
+            drawClipped(to: canvas, environment: environment)
+        }
+    }
+
+    private func drawClipped(to canvas: Canvas, environment: EnvironmentValues) {
         let characters = Array(text.wrappedValue)
         let cursor = state.clamp(to: characters.count)
         updateScrollIndex(characters: characters, cursor: cursor, width: frame.w)

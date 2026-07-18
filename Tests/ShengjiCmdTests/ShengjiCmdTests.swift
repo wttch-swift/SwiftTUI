@@ -1955,6 +1955,39 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(moved.grid[1][1].style.foregroundColor == .brightCyan)
 }
 
+@Test func borderedChatInputClipsTextBeforeTheRightBorder() {
+    let value = State(wrappedValue: "")
+    let app = TerminalApp(width: 34, height: 3) {
+        HStack(alignment: .center) {
+            Text("❯")
+                .foregroundColor(.brightCyan)
+                .bold()
+            Spacer(width: 1)
+            TextField(
+                "输入消息，回车发送到当前对话……",
+                text: value.projectedValue
+            )
+            Spacer(width: 1)
+        }
+        .padding(horizontal: 1)
+        .frame(width: 30, height: 3, alignment: .center)
+        .bordered(.brightCyan, style: .rounded)
+    }
+
+    let initial = app.render()
+    #expect(initial.grid[1][28].char == " ")
+    #expect(initial.grid[1][29].char == "│")
+
+    for _ in 0..<40 {
+        #expect(app.send(KeyPress(key: .character("w"), characters: "w")) == .handled)
+    }
+
+    let canvas = app.render()
+    #expect(canvas.grid[1][28].char == " ")
+    #expect(canvas.grid[1][29].char == "│")
+    #expect(String(canvas.grid[1][30..<34].map(\.char)) == "    ")
+}
+
 @Test func textFieldInvokesEditingAndCommitCallbacks() {
     let value = State(wrappedValue: "")
     var editingChanges: [Bool] = []
@@ -2016,6 +2049,21 @@ private func renderIncrementalBenchmarkCanvas(
     Render.render(node, in: Rect(x: 0, y: 0, w: size.w, h: size.h), to: canvas)
 
     #expect(size.w >= "较长标题".displayWidth + 4)
+    #expect(canvas.grid[0][size.w - 1].char == "╮")
+}
+
+@Test func checkmarkTitleUsesTextWidthWhenDrawingGroupBoxBorder() {
+    let title = "✓ 2. DeepSeek 回答"
+    #expect(title.displayWidth == 18)
+
+    let group = GroupBox(title) { Text("content") }
+    let node = group._makeLayoutNode()
+    let size = node.measure(proposed: ProposedSize())
+    let canvas = Canvas(width: size.w, height: size.h)
+
+    Render.render(node, in: Rect(x: 0, y: 0, w: size.w, h: size.h), to: canvas)
+
+    #expect(canvas.grid[0][2].char == "✓")
     #expect(canvas.grid[0][size.w - 1].char == "╮")
 }
 

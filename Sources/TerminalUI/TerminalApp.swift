@@ -129,7 +129,7 @@ public final class TerminalApp {
         enterTerminalScreen(clearScreen: clearScreen)
 
         var isRunning = true
-        var needsRender = true
+        var renderScheduler = _FrameRenderScheduler()
         // 双缓冲负责复用两张 Canvas，并用上一帧 presented 生成按行 diff 输出。
         // RenderCache 负责复用 View 叶子节点绘制快照。两者分工独立：前者减少
         // 画布分配和终端输出，后者减少重复 draw。
@@ -137,7 +137,7 @@ public final class TerminalApp {
         let renderCache = RenderCache()
 
         while isRunning {
-            if needsRender {
+            if renderScheduler.consumeIfDue() {
                 if clearScreen {
                     // 使用绝对行坐标重绘，不依赖 \n 推进光标。终端底部的换行
                     // 可能触发滚屏，导致最后一行状态栏被卷到画面顶部。
@@ -153,12 +153,12 @@ public final class TerminalApp {
                     let canvas = render()
                     canvas.flush(terminatingLine: false)
                 }
-                needsRender = false
             }
 
             // 较短轮询周期使后台动画请求能及时进入主循环，同时 poll 在无输入时
-            // 仍会休眠，不会产生忙等待。
-            if let key = try input.readKey(timeoutMilliseconds: 16) {
+            // 仍会休眠，不会产生忙等待。有待刷新的帧时，轮询只睡到下一帧时间点，
+            // 让多次状态变化先进入缓冲，再在固定节奏上合并成一次绘制。
+            if let key = try input.readKey(timeoutMilliseconds: renderScheduler.pollTimeoutMilliseconds) {
                 events.push(.terminal(.key(key)))
             }
 
@@ -167,10 +167,10 @@ public final class TerminalApp {
                 case .state(let stateEvent):
                     switch stateEvent {
                     case .renderRequested:
-                        needsRender = true
+                        renderScheduler.requestRender()
                     case .action(let action):
                         action()
-                        needsRender = true
+                        renderScheduler.requestRender()
                     case .stopRequested:
                         isRunning = false
                     }
@@ -178,11 +178,11 @@ public final class TerminalApp {
                     switch terminalEvent {
                     case .key(let key):
                         if dispatchKeyEvent(key).consumesEvent {
-                            needsRender = true
+                            renderScheduler.requestRender()
                         }
                     case .signal(let signal):
                         if dispatch(terminalEvent).requestsRender {
-                            needsRender = true
+                            renderScheduler.requestRender()
                         }
                         signalHandler?(signal)
                         switch signal {
@@ -200,29 +200,29 @@ public final class TerminalApp {
                             enterTerminalScreen(clearScreen: clearScreen)
                             if let size = updateTerminalSize(),
                                dispatch(.resize(size)).requestsRender {
-                                needsRender = true
+                                renderScheduler.requestRender()
                             }
                             // 终端恢复后尺寸和内容都可能和暂停前不同，直接丢弃双缓冲
                             // 与渲染缓存，让下一帧走完整重建。
                             canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
                             renderCache.reset()
-                            needsRender = true
+                            renderScheduler.requestRender()
                         case .resume:
                             // A SIGCONT may also arrive independently of our suspend
                             // path. A full redraw is harmless and repairs stale output.
                             if let size = updateTerminalSize(),
                                dispatch(.resize(size)).requestsRender {
-                                needsRender = true
+                                renderScheduler.requestRender()
                             }
                             // 恢复信号可能不是从本进程 suspend 流程回来，保守地清掉
                             // 上一帧画布和节点快照。
                             canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
                             renderCache.reset()
-                            needsRender = true
+                            renderScheduler.requestRender()
                         case .windowSizeChanged:
                             if let size = updateTerminalSize(),
                                dispatch(.resize(size)).requestsRender {
-                                needsRender = true
+                                renderScheduler.requestRender()
                             }
                             if clearScreen {
                                 writeTerminal("\u{001B}[2J\u{001B}[H")
@@ -231,11 +231,11 @@ public final class TerminalApp {
                             // 和旧节点 snapshot 都不能继续复用。
                             canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
                             renderCache.reset()
-                            needsRender = true
+                            renderScheduler.requestRender()
                         }
                     case .resize, .message:
                         if dispatch(terminalEvent).requestsRender {
-                            needsRender = true
+                            renderScheduler.requestRender()
                         }
                     }
                 }
@@ -455,6 +455,40 @@ public final class TerminalApp {
 private enum _TerminalAppRuntimeEvent {
     case state(TerminalAppEvent)
     case terminal(TerminalEvent)
+}
+
+private struct _FrameRenderScheduler {
+    private static let frameIntervalNanoseconds: UInt64 = 16_666_667
+    private static let maximumPollMilliseconds: Int32 = 16
+
+    private var isRenderPending = true
+    private var nextRenderDeadline: UInt64 = 0
+
+    var pollTimeoutMilliseconds: Int32 {
+        guard isRenderPending else { return Self.maximumPollMilliseconds }
+        let now = Self.nowNanoseconds()
+        guard now < nextRenderDeadline else { return 0 }
+        let remaining = nextRenderDeadline - now
+        let roundedMilliseconds = Int32((remaining + 999_999) / 1_000_000)
+        return min(Self.maximumPollMilliseconds, max(0, roundedMilliseconds))
+    }
+
+    mutating func requestRender() {
+        isRenderPending = true
+    }
+
+    mutating func consumeIfDue() -> Bool {
+        guard isRenderPending else { return false }
+        let now = Self.nowNanoseconds()
+        guard now >= nextRenderDeadline else { return false }
+        isRenderPending = false
+        nextRenderDeadline = now + Self.frameIntervalNanoseconds
+        return true
+    }
+
+    private static func nowNanoseconds() -> UInt64 {
+        DispatchTime.now().uptimeNanoseconds
+    }
 }
 
 private final class _TerminalAppEventQueue: @unchecked Sendable {
