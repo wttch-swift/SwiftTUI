@@ -23,7 +23,12 @@ package final class Canvas {
 
     /// 清除所有已绘制内容，同时保留画布尺寸。
     package func clean() {
-        grid = Array(repeating: Array(repeating: .Blank, count: width), count: height)
+        clipStack.removeAll(keepingCapacity: true)
+        for y in grid.indices {
+            for x in grid[y].indices {
+                grid[y][x] = .Blank
+            }
+        }
     }
 
     /// 把网格逐行编码为终端可打印字符串。
@@ -63,6 +68,37 @@ package final class Canvas {
             guard row != previous.grid[index] else { return nil }
             return "\u{001B}[\(index + 1);1H" + encode(row: row, colorSupport: colorSupport)
         }.joined()
+    }
+
+    /// 复制指定矩形内的 cell 快照。超出画布的部分会被裁掉。
+    ///
+    /// RenderCache 在可复用节点重画后调用它，把节点绘制结果保存下来。这里复制
+    /// 的是最终 cell，而不是 View 或 LayoutNode，因此下一帧命中时可以完全跳过
+    /// 节点自己的 draw 逻辑。
+    package func snapshot(in rect: Rect) -> [[_Cell]] {
+        let canvasBounds = Rect(x: 0, y: 0, w: width, h: height)
+        let target = rect.intersection(canvasBounds)
+        guard target.w > 0, target.h > 0 else { return [] }
+
+        return (target.y..<target.maxY).map { y in
+            Array(grid[y][target.x..<target.maxX])
+        }
+    }
+
+    /// 把 cell 快照贴回指定矩形左上角。快照尺寸和目标矩形不一致时取交集。
+    ///
+    /// 这是缓存命中后的快速路径。按行 `replaceSubrange` 写回，比逐 cell 赋值少
+    /// 很多 Swift 循环开销；benchmark 里的 `paste reused cells` 就是在量这里。
+    package func paste(_ cells: [[_Cell]], in rect: Rect) {
+        let canvasBounds = Rect(x: 0, y: 0, w: width, h: height)
+        let target = rect.intersection(canvasBounds)
+        guard target.w > 0, target.h > 0 else { return }
+
+        for (dy, y) in (target.y..<target.maxY).enumerated() where cells.indices.contains(dy) {
+            let count = min(target.w, cells[dy].count)
+            guard count > 0 else { continue }
+            grid[y].replaceSubrange(target.x..<(target.x + count), with: cells[dy][0..<count])
+        }
     }
 
     /// 把一行中连续且样式相同的 cell 合并后再编码 ANSI 序列。
@@ -312,6 +348,52 @@ package final class Canvas {
                 backgroundColor: background ?? .black
             )
         )
+    }
+}
+
+/// 复用两张离屏画布轮流绘制和展示。
+///
+/// `drawing` 接收当前帧绘制，`presented` 保存上一帧已经输出到终端的内容。
+/// 每次生成输出后交换两者，下一帧直接清理并复用旧的 presented 画布，避免
+/// 交互循环为每一帧重新分配完整 cell 网格。
+///
+/// 这个类只负责“画布生命周期”和“按行 diff 输出”，不关心 View 是否变化。
+/// View 级别的复用由 RenderCache 决定；双缓冲只保证每帧都有一张干净的 drawing
+/// buffer，并能用上一帧 presented buffer 生成更短的终端输出。
+package final class CanvasDoubleBuffer {
+    private var presented: Canvas
+    private var drawing: Canvas
+    private var hasPresented = false
+
+    package init(width: Int, height: Int) {
+        presented = Canvas(width: width, height: height)
+        drawing = Canvas(width: width, height: height)
+    }
+
+    /// 清空双缓冲状态。下一次输出会退回全量定位绘制。
+    package func reset() {
+        presented.clean()
+        drawing.clean()
+        hasPresented = false
+    }
+
+    /// 在 drawing buffer 上绘制一帧，并返回相对于上一帧的定位输出。
+    ///
+    /// 首帧没有 `presented` 可比对，所以输出完整画面；从第二帧开始只输出发生
+    /// 变化的行。生成输出后交换两张画布，旧 drawing 就成为下一帧的 presented。
+    package func renderOutput(
+        colorSupport: TerminalColorSupport = .current,
+        draw: (Canvas) -> Void
+    ) -> String {
+        drawing.clean()
+        draw(drawing)
+        let output = drawing.positionedOutput(
+            comparedTo: hasPresented ? presented : nil,
+            colorSupport: colorSupport
+        )
+        swap(&presented, &drawing)
+        hasPresented = true
+        return output
     }
 }
 private extension BorderStyle {

@@ -5,7 +5,7 @@ extension Spacer: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _LayoutNode { _SpacerLayoutNode(width: width, height: height) }
 }
 
-final class _SpacerLayoutNode: _RenderableLayoutNode, _FlexibleLayoutNode {
+final class _SpacerLayoutNode: _RenderReusableLayoutNode, _FlexibleLayoutNode {
     let width: Int?
     let height: Int?
     private(set) var frame = Rect(x: 0, y: 0, w: 0, h: 0)
@@ -41,5 +41,17 @@ final class _SpacerLayoutNode: _RenderableLayoutNode, _FlexibleLayoutNode {
                 background: background
             )
         }
+    }
+
+    func renderFingerprint(environment: EnvironmentValues) -> Int {
+        // Spacer 自身通常不画内容，但背景色存在时会填满 frame。frame 和相关
+        // 前景/背景都必须纳入 fingerprint，否则 Stack 背景变化会被错误复用。
+        var hasher = Hasher()
+        hasher.combine(width)
+        hasher.combine(height)
+        hasher.combine(frame)
+        hasher.combine(environment.foregroundColor)
+        hasher.combine(environment.backgroundColor)
+        return hasher.finalize()
     }
 }

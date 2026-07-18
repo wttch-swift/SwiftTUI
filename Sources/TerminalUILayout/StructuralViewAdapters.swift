@@ -59,7 +59,13 @@ extension _EnvironmentWritingContent: _LayoutNodeProducing {
 
 extension _BackgroundColorFill: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _LayoutNode {
-        _LeafNode { canvas, frame, _ in
+        _LeafNode(
+            fingerprint: { _ in
+                var hasher = Hasher()
+                hasher.combine(color)
+                return hasher.finalize()
+            }
+        ) { canvas, frame, _ in
             canvas.fill(frame, background: color)
         }
     }

@@ -49,7 +49,7 @@ package protocol _FocusableLayoutNode: _FocusTargetLayoutNode {}
 ///
 /// 状态使用引用语义，是因为同一个 `TextField` 值可能在一次渲染过程中被
 /// 多层 View 包装；所有对应节点都必须观察到相同的光标和焦点变化。
-private final class _TextFieldLayoutNode: _RenderableLayoutNode, _FocusableLayoutNode,
+private final class _TextFieldLayoutNode: _RenderReusableLayoutNode, _FocusableLayoutNode,
     _FlexibleLayoutNode {
     let title: String
     let text: Binding<String>
@@ -196,6 +196,18 @@ private final class _TextFieldLayoutNode: _RenderableLayoutNode, _FocusableLayou
         let cursorX = frame.x + displayWidth(characters[state.scrollIndex..<cursor])
         guard cursorX < frame.maxX else { return }
         drawCursor(at: cursorX, to: canvas, environment: environment)
+    }
+
+    func renderFingerprint(environment: EnvironmentValues) -> Int {
+        var hasher = Hasher()
+        hasher.combine(title)
+        hasher.combine(text.wrappedValue)
+        hasher.combine(text.dependencies)
+        hasher.combine(state.cursor)
+        hasher.combine(state.scrollIndex)
+        hasher.combine(state.isFocused)
+        hasher.combine(environment.renderFingerprint)
+        return hasher.finalize()
     }
 
     private func updateScrollIndex(characters: [Character], cursor: Int, width: Int) {

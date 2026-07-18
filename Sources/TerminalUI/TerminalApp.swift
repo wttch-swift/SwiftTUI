@@ -4,9 +4,10 @@ import TerminalUIRender
 
 /// A one-way View → LayoutNode → Render → Canvas host.
 public final class TerminalApp {
-    private let width: Int
-    private let height: Int
+    private var width: Int
+    private var height: Int
     private let root: any View
+    private var signalHandler: ((TerminalSignal) -> Void)?
     private var renderedRoot: (any _LayoutNode)?
     private var focusedNodeIndex: Int?
     /// 区分“尚未选择过焦点”和“用户按 Esc 主动清空焦点”。
@@ -18,19 +19,35 @@ public final class TerminalApp {
         self.root = ZStack(content)
     }
 
+    /// Observes terminal lifecycle signals on TerminalApp's main event loop.
+    ///
+    /// The callback runs after the POSIX signal has been converted to a regular
+    /// runtime event, so it may update `@State` or post TerminalStateRuntime
+    /// actions. TerminalApp still performs mandatory terminal cleanup, suspend,
+    /// resume and resize behavior after notifying the callback.
+    @discardableResult
+    public func onSignal(_ handler: @escaping (TerminalSignal) -> Void) -> TerminalApp {
+        signalHandler = handler
+        return self
+    }
+
     /// 构建并渲染一帧。该入口只供包内 demo 与测试使用；外部客户端通过
     /// `run()` 启动应用，不直接接触 Canvas 和布局树。
     package func render() -> Canvas {
         let canvas = Canvas(width: width, height: height)
+        render(to: canvas, cache: nil)
+        return canvas
+    }
+
+    private func render(to canvas: Canvas, cache: RenderCache?) {
         let bounds = Rect(x: 0, y: 0, w: width, h: height)
         let node = root._makeLayoutNode()
         // 声明式 View 每帧都会生成新节点，先迁移交互状态，再统一校正焦点。
         restoreFocusableState(from: renderedRoot, to: node)
         restoreTabSelection(from: renderedRoot, to: node)
         synchronizeFocus(in: node)
-        Render.render(node, in: bounds, to: canvas)
+        Render.render(node, in: bounds, to: canvas, cache: cache)
         renderedRoot = node
-        return canvas
     }
 
     /// 向当前布局树注入按键。子节点优先，未处理时向外层冒泡。
@@ -83,43 +100,44 @@ public final class TerminalApp {
         let colorSupport = TerminalColorSupport.current
 
         let events = _TerminalAppEventQueue()
-        TerminalStateRuntime.setEventHandler { events.push($0) }
+        let signals = _TerminalSignalCoordinator()
+        TerminalStateRuntime.setEventHandler { events.push(.state($0)) }
+        signals.start { events.push(.signal($0)) }
 
         defer {
             TerminalStateRuntime.setEventHandler(nil)
             input.stop()
-            if clearScreen {
-                // 恢复自动换行和光标显示，避免影响应用退出后的 shell。
-                writeTerminal("\u{001B}[?7h\u{001B}[?25h")
-            }
+            leaveTerminalScreen(clearScreen: clearScreen)
+            // Restore the embedding process's original signal dispositions only
+            // after the terminal is safe for the shell again.
+            signals.stop()
         }
 
-        if clearScreen {
-            // DECAWM (?7) 控制终端的自动换行。全屏画布会写到右下角，若保持
-            // 自动换行，终端可能进入 pending-wrap 状态，并在下一帧开始时先
-            // 滚屏一行，造成状态栏末尾跑到左上角以及前几行错位。
-            writeTerminal("\u{001B}[?7l\u{001B}[2J\u{001B}[H\u{001B}[?25l")
-        }
+        enterTerminalScreen(clearScreen: clearScreen)
 
         var isRunning = true
         var needsRender = true
-        var presentedCanvas: Canvas?
+        // 双缓冲负责复用两张 Canvas，并用上一帧 presented 生成按行 diff 输出。
+        // RenderCache 负责复用 View 叶子节点绘制快照。两者分工独立：前者减少
+        // 画布分配和终端输出，后者减少重复 draw。
+        var canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+        let renderCache = RenderCache()
 
         while isRunning {
             if needsRender {
-                let canvas = render()
                 if clearScreen {
                     // 使用绝对行坐标重绘，不依赖 \n 推进光标。终端底部的换行
                     // 可能触发滚屏，导致最后一行状态栏被卷到画面顶部。
-                    let output = canvas.positionedOutput(
-                        comparedTo: presentedCanvas,
-                        colorSupport: colorSupport
-                    )
+                    // 这里的闭包只负责把当前帧画到 drawing buffer；renderOutput
+                    // 会在闭包结束后和上一帧比较，并交换 presented/drawing。
+                    let output = canvasBuffer.renderOutput(colorSupport: colorSupport) { canvas in
+                        render(to: canvas, cache: renderCache)
+                    }
                     if !output.isEmpty {
                         writeTerminal(output)
                     }
-                    presentedCanvas = canvas
                 } else {
+                    let canvas = render()
                     canvas.flush(terminatingLine: false)
                 }
                 needsRender = false
@@ -135,13 +153,57 @@ public final class TerminalApp {
 
             while let event = events.pop() {
                 switch event {
-                case .renderRequested:
-                    needsRender = true
-                case .action(let action):
-                    action()
-                    needsRender = true
-                case .stopRequested:
-                    isRunning = false
+                case .state(let stateEvent):
+                    switch stateEvent {
+                    case .renderRequested:
+                        needsRender = true
+                    case .action(let action):
+                        action()
+                        needsRender = true
+                    case .stopRequested:
+                        isRunning = false
+                    }
+                case .signal(let signal):
+                    signalHandler?(signal)
+                    switch signal {
+                    case .interrupt, .terminate, .hangup, .quit:
+                        // Leave the loop normally so defer always restores termios
+                        // and screen modes before control returns to the caller.
+                        isRunning = false
+                    case .suspend:
+                        // Shell must regain a cooked, visible terminal while this
+                        // process is stopped. raise(SIGTSTP) returns after `fg`.
+                        input.stop()
+                        leaveTerminalScreen(clearScreen: clearScreen)
+                        signals.suspendCurrentProcess()
+                        try input.start()
+                        enterTerminalScreen(clearScreen: clearScreen)
+                        updateTerminalSize()
+                        // 终端恢复后尺寸和内容都可能和暂停前不同，直接丢弃双缓冲
+                        // 与渲染缓存，让下一帧走完整重建。
+                        canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+                        renderCache.reset()
+                        needsRender = true
+                    case .resume:
+                        // A SIGCONT may also arrive independently of our suspend
+                        // path. A full redraw is harmless and repairs stale output.
+                        updateTerminalSize()
+                        // 恢复信号可能不是从本进程 suspend 流程回来，保守地清掉
+                        // 上一帧画布和节点快照。
+                        canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+                        renderCache.reset()
+                        needsRender = true
+                    case .windowSizeChanged:
+                        updateTerminalSize()
+                        if clearScreen {
+                            writeTerminal("\u{001B}[2J\u{001B}[H")
+                        }
+                        // 尺寸变化会让 frame、行数和列数全部失效；旧 Canvas diff
+                        // 和旧节点 snapshot 都不能继续复用。
+                        canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+                        renderCache.reset()
+                        needsRender = true
+                    }
                 }
             }
         }
@@ -289,19 +351,43 @@ public final class TerminalApp {
         guard let data = text.data(using: .utf8) else { return }
         FileHandle.standardOutput.write(data)
     }
+
+    private func enterTerminalScreen(clearScreen: Bool) {
+        guard clearScreen else { return }
+        // DECAWM (?7) controls automatic wrapping. Writing the bottom-right cell
+        // with wrapping enabled can scroll the terminal before the next frame.
+        writeTerminal("\u{001B}[?7l\u{001B}[2J\u{001B}[H\u{001B}[?25l")
+    }
+
+    private func leaveTerminalScreen(clearScreen: Bool) {
+        guard clearScreen else { return }
+        // Restore automatic wrapping and cursor visibility for the shell.
+        writeTerminal("\u{001B}[?7h\u{001B}[?25h")
+    }
+
+    private func updateTerminalSize() {
+        guard let size = TerminalSizeReader.current() else { return }
+        width = size.width
+        height = size.height
+    }
+}
+
+private enum _TerminalAppRuntimeEvent {
+    case state(TerminalAppEvent)
+    case signal(TerminalSignal)
 }
 
 private final class _TerminalAppEventQueue: @unchecked Sendable {
     private let lock = NSLock()
-    private var events: [TerminalAppEvent] = []
+    private var events: [_TerminalAppRuntimeEvent] = []
 
-    func push(_ event: TerminalAppEvent) {
+    func push(_ event: _TerminalAppRuntimeEvent) {
         lock.lock()
         events.append(event)
         lock.unlock()
     }
 
-    func pop() -> TerminalAppEvent? {
+    func pop() -> _TerminalAppRuntimeEvent? {
         lock.lock()
         defer { lock.unlock() }
         guard !events.isEmpty else { return nil }

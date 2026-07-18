@@ -58,6 +58,49 @@ let size = TerminalSizeReader.current(
 状态修改、动画帧和显式 action 通过 `TerminalStateRuntime` 唤醒事件循环。
 `TerminalStateRuntime.stop()` 可请求应用正常退出。
 
+## 信号处理
+
+TerminalUI 会观察与终端生命周期相关的 POSIX 信号：
+
+| 信号 | TerminalSignal | 默认处理 |
+| --- | --- | --- |
+| `SIGINT` | `.interrupt` | 恢复终端并结束 `run()` |
+| `SIGTERM` | `.terminate` | 恢复终端并结束 `run()` |
+| `SIGHUP` | `.hangup` | 恢复终端并结束 `run()` |
+| `SIGQUIT` | `.quit` | 恢复终端并结束 `run()` |
+| `SIGTSTP` | `.suspend` | 恢复 termios 和屏幕模式后挂起进程 |
+| `SIGCONT` | `.resume` | 重新进入 raw mode、读取尺寸并完整重绘 |
+| `SIGWINCH` | `.windowSizeChanged` | 更新画布行列数并完整重绘 |
+
+应用可以通过公开接口观察信号：
+
+```swift
+let app = TerminalApp(width: size.width, height: size.height) {
+    RootView()
+}
+.onSignal { signal in
+    if signal == .windowSizeChanged {
+        // 回调已位于 TerminalApp 主事件循环，可以更新普通 UI 状态。
+    }
+}
+
+try app.run()
+```
+
+信号回调是观察接口，不会取代框架的终端清理。即使应用注册回调，Ctrl-Z 仍会先
+恢复终端再挂起，终止信号也仍会让 `run()` 正常退出。
+
+实现位置：
+
+- `Input/TerminalSignalCoordinator.swift`：公开 `TerminalSignal`，安装 Dispatch signal
+  source，保存和恢复原进程 signal disposition，并执行真正的 `SIGTSTP`。
+- `TerminalApp.swift` 的 `run()`：在主事件循环消费信号，负责退出、挂起、恢复、
+  更新尺寸和请求完整重绘。
+- `Input/TerminalInput.swift`：保存、进入和恢复 POSIX termios 模式。
+
+原始 Dispatch signal handler 只向线程安全事件队列投递值，不直接修改 View、Canvas
+或 termios。这样应用回调不需要遵守 async-signal-safe 限制。
+
 ## 模块门面
 
 `ModuleExports.swift` 只公开重新导出的 View API。Canvas 仅有 package typealias，
@@ -73,4 +116,3 @@ let size = TerminalSizeReader.current(
 
 应用退出和抛错路径都应保证恢复终端模式。不要绕过 TerminalApp 直接操作 termios
 或从 View body 执行阻塞 I/O。
-

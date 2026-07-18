@@ -1,5 +1,10 @@
 import Foundation
 
+package struct _StateDependency: Hashable {
+    package let id: ObjectIdentifier
+    package let version: UInt64
+}
+
 /// 轻量级状态容器，语义上类似 SwiftUI 的 `@State`。
 ///
 /// 当前实现把真实值直接保存在 wrapper 实例里，所以更适合挂在长期存在的
@@ -9,6 +14,7 @@ import Foundation
 @propertyWrapper
 public final class State<Value> {
     private var value: Value
+    private var version: UInt64 = 0
 
     /// 允许 timer、Combine sink、后台任务等跨线程读写状态。
     ///
@@ -25,6 +31,7 @@ public final class State<Value> {
         set {
             lock.lock()
             value = newValue
+            version &+= 1
             lock.unlock()
 
             /// `@State` 的赋值保持同步语义：上面的 value 已经写入完成。
@@ -40,12 +47,19 @@ public final class State<Value> {
     public var projectedValue: Binding<Value> {
         Binding(
             get: { [self] in wrappedValue },
-            set: { [self] in wrappedValue = $0 }
+            set: { [self] in wrappedValue = $0 },
+            dependencies: { [self] in [dependency] }
         )
     }
 
     public init(wrappedValue: Value) {
         self.value = wrappedValue
+    }
+
+    package var dependency: _StateDependency {
+        lock.lock()
+        defer { lock.unlock() }
+        return _StateDependency(id: ObjectIdentifier(self), version: version)
     }
 }
 
@@ -57,6 +71,7 @@ public final class State<Value> {
 public struct Binding<Value> {
     private let getter: () -> Value
     private let setter: (Value) -> Void
+    private let dependencyProvider: () -> [_StateDependency]
 
     public var wrappedValue: Value {
         get { getter() }
@@ -66,10 +81,25 @@ public struct Binding<Value> {
     public init(get: @escaping () -> Value, set: @escaping (Value) -> Void) {
         self.getter = get
         self.setter = set
+        self.dependencyProvider = { [] }
+    }
+
+    package init(
+        get: @escaping () -> Value,
+        set: @escaping (Value) -> Void,
+        dependencies: @escaping () -> [_StateDependency]
+    ) {
+        self.getter = get
+        self.setter = set
+        self.dependencyProvider = dependencies
     }
 
     public static func constant(_ value: Value) -> Binding<Value> {
         Binding(get: { value }, set: { _ in })
+    }
+
+    package var dependencies: [_StateDependency] {
+        dependencyProvider()
     }
 
     public func map<Mapped>(
@@ -78,7 +108,8 @@ public struct Binding<Value> {
     ) -> Binding<Mapped> {
         Binding<Mapped>(
             get: { get(wrappedValue) },
-            set: { wrappedValue = set($0, wrappedValue) }
+            set: { wrappedValue = set($0, wrappedValue) },
+            dependencies: { dependencies }
         )
     }
 }

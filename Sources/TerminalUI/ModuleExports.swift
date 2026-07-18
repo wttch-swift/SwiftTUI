@@ -4,3 +4,4 @@ import TerminalUILayout
 import TerminalUIRender
 
 package typealias Canvas = TerminalUICore.Canvas
+package typealias CanvasDoubleBuffer = TerminalUICore.CanvasDoubleBuffer

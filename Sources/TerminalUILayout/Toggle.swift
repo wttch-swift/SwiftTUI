@@ -4,7 +4,7 @@ extension Toggle: _LayoutNodeProducing {
     }
 }
 
-private final class _ToggleNode: _ContainerLayoutNode, _RenderableLayoutNode {
+private final class _ToggleNode: _ContainerLayoutNode, _RenderReusableLayoutNode {
     let title: String
     let isOn: Binding<Bool>
 
@@ -31,5 +31,14 @@ private final class _ToggleNode: _ContainerLayoutNode, _RenderableLayoutNode {
             underline: environment._isUnderline,
             strikethrough: environment._isStrikethrough
         )
+    }
+
+    func renderFingerprint(environment: EnvironmentValues) -> Int {
+        var hasher = Hasher()
+        hasher.combine(title)
+        hasher.combine(isOn.wrappedValue)
+        hasher.combine(isOn.dependencies)
+        hasher.combine(environment.renderFingerprint)
+        return hasher.finalize()
     }
 }

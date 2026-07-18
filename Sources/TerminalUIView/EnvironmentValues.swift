@@ -52,3 +52,23 @@ public struct EnvironmentValues {
     /// 行限制
     package var lineLimit: Int? = nil
 }
+
+package extension EnvironmentValues {
+    /// 与常见文字/叶子绘制有关的环境指纹。
+    ///
+    /// 叶子节点可以直接组合这个值，避免每个节点重复列出前景色、背景色、粗体、
+    /// 斜体、下划线、删除线、行限制和焦点边框等环境输入。
+    var renderFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(foregroundColor)
+        hasher.combine(backgroundColor)
+        hasher.combine(_isBold)
+        hasher.combine(_isItalic)
+        hasher.combine(_isUnderline)
+        hasher.combine(_isStrikethrough)
+        hasher.combine(lineLimit)
+        hasher.combine(_focusBorderColor)
+        hasher.combine(_isFocusEffectEnabled)
+        return hasher.finalize()
+    }
+}

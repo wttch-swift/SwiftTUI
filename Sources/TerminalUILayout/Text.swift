@@ -11,7 +11,7 @@ extension Text: _LayoutNodeProducing {
     }
 }
 
-private final class _TextLayoutNode: _RenderableLayoutNode {
+private final class _TextLayoutNode: _RenderReusableLayoutNode {
     let text: String
     private(set) var frame: Rect = .zero
 
@@ -54,6 +54,13 @@ private final class _TextLayoutNode: _RenderableLayoutNode {
                 strikethrough: environment._isStrikethrough
             )
         }
+    }
+
+    func renderFingerprint(environment: EnvironmentValues) -> Int {
+        var hasher = Hasher()
+        hasher.combine(text)
+        hasher.combine(environment.renderFingerprint)
+        return hasher.finalize()
     }
 }
 
@@ -147,4 +154,3 @@ private struct _TextLayout {
         return lines
     }
 }
-

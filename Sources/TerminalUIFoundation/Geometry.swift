@@ -2,7 +2,7 @@
 ///
 /// `nil` 表示该轴没有上限；具体布局节点可根据固有尺寸和提议值决定
 /// 最终测量结果。它是一次协商，不代表最终分配的 frame。
-public struct ProposedSize: Sendable {
+public struct ProposedSize: Equatable, Hashable, Sendable {
     /// 建议宽度，单位为终端 cell；`nil` 表示不受约束。
     public var width: Int?
     /// 建议高度，单位为终端行；`nil` 表示不受约束。
@@ -20,7 +20,7 @@ public struct ProposedSize: Sendable {
 }
 
 /// 使用终端单元格表示的确定二维尺寸。
-public struct Size: Sendable {
+public struct Size: Equatable, Hashable, Sendable {
     /// 水平方向的 cell 数量。
     public let w: Int
     /// 垂直方向的行数。
@@ -36,7 +36,7 @@ public extension Size {
     static let zero = Size(w: 0, h: 0)
 }
 
-public struct Offset: Sendable {
+public struct Offset: Equatable, Hashable, Sendable {
     public let x: Int
     public let y: Int
 
@@ -50,7 +50,7 @@ public extension Offset {
     static let zero = Offset(x: 0, y: 0)
 }
 
-public struct Rect: Sendable {
+public struct Rect: Equatable, Hashable, Sendable {
     public let x: Int
     public let y: Int
     public let w: Int
