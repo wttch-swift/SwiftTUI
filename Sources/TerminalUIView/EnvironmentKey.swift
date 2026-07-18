@@ -35,7 +35,10 @@ struct StrikethroughTextKey: EnvironmentKey {
     static let defaultValue = false
 }
 
-/// 所有焦点控件共享的强调色，避免 TextField、ScrollView 和边框各自硬编码颜色。
+/// 所有交互控件共享的强调色。
+///
+/// 有边框的容器会在后代获得焦点时把边框切到该颜色；没有边框的控件可以用
+/// 它绘制光标、滚动条、选中标记等自己的焦点反馈。
 struct FocusBorderColorKey: EnvironmentKey {
     static let defaultValue = Color.brightCyan
 }
@@ -88,9 +91,20 @@ public extension View {
             .background(_BackgroundColorFill(color: color))
     }
 
-    /// 设置当前视图层级统一使用的焦点边框强调色。
-    func focusBorderColor(_ color: Color) -> some View {
+    /// 设置当前视图层级统一使用的强调色。
+    ///
+    /// 这个 API 语义更接近 SwiftUI 的 `accentColor`：它不是强制给所有控件画
+    /// 边框，而是提供一个统一的交互强调色。有边框的容器会用它变色，没有边框
+    /// 的控件仍由自身决定如何表现焦点。
+    func accentColor(_ color: Color) -> some View {
         environment(\._focusBorderColor, color)
+    }
+
+    /// 设置当前视图层级统一使用的焦点边框强调色。
+    ///
+    /// 保留这个名字作为更直接的终端语义；实现上等价于 `accentColor(_:)`。
+    func focusBorderColor(_ color: Color) -> some View {
+        accentColor(color)
     }
 
     /// 禁用当前视图层级中边框的默认焦点变色效果。

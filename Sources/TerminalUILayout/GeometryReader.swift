@@ -8,6 +8,8 @@ extension GeometryReader: _LayoutNodeProducing {
 
 private final class _GeometryReaderLayoutNode: _ContainerLayoutNode {
     private let content: (GeometryProxy) -> any _LayoutNode
+    private var resolvedChild: (any _LayoutNode)?
+    private var resolvedFrame: Rect?
 
     init(content: @escaping (GeometryProxy) -> any _LayoutNode) {
         self.content = content
@@ -20,9 +22,16 @@ private final class _GeometryReaderLayoutNode: _ContainerLayoutNode {
 
     package override func layout(in rect: Rect) {
         frame = rect
-        let proxy = GeometryProxy(frame: rect)
-        let child = content(proxy)
-        children = [child]
+        let child: any _LayoutNode
+        if let existing = resolvedChild, resolvedFrame == rect {
+            child = existing
+        } else {
+            let proxy = GeometryProxy(frame: rect)
+            child = content(proxy)
+            resolvedChild = child
+            resolvedFrame = rect
+            children = [child]
+        }
         child.layout(in: rect)
     }
 }

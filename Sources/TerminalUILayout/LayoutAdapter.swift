@@ -44,6 +44,14 @@ package protocol _FocusScopeLayoutNode {
     var focusScopeChildren: [any _LayoutNode] { get }
 }
 
+/// 标记当前节点是否正在提供一个激活的模态焦点范围。
+///
+/// TerminalApp 用它判断 sheet 打开/关闭时是否需要重置焦点入口，避免沿用
+/// 底层页面的焦点索引，也避免第一次 Tab 只是从“无焦点”进入弹窗。
+package protocol _ModalFocusScopeLayoutNode {
+    var isModalFocusScopeActive: Bool { get }
+}
+
 /// 在渲染遍历中为当前子树派生环境值的节点能力。
 package protocol _EnvironmentLayoutNode {
     func applyingEnvironment(to environment: EnvironmentValues) -> EnvironmentValues

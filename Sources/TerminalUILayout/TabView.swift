@@ -100,13 +100,15 @@ package protocol _TabNavigationNode: AnyObject {
     func handleTabNavigation(_ event: KeyPress) -> KeyPress.Result
 }
 
-private final class _TabViewLayoutNode: _ContainerLayoutNode, _TabSelectionNode,
-    _TabNavigationNode {
+private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNode,
+    _TabSelectionNode, _TabNavigationNode {
     private let pages: [_TabPage]
     private var tabBar: _TabBarLayoutNode
     private let usesExternalSelection: Bool
     private let select: (AnyHashable?) -> Void
     private(set) var selectedIndex: Int
+    var expandsHorizontally: Bool { true }
+    var expandsVertically: Bool { true }
 
     init(
         pages: [_TabPage],
@@ -130,9 +132,10 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _TabSelectionNode,
         let contentSize = pages[selectedIndex].content.measure(
             proposed: ProposedSize(width: proposed.width, height: remainingHeight)
         )
+        let natural = Size(w: max(barSize.w, contentSize.w), h: barSize.h + contentSize.h)
         return Size(
-            w: min(max(barSize.w, contentSize.w), proposed.width ?? Int.max),
-            h: min(barSize.h + contentSize.h, proposed.height ?? Int.max)
+            w: proposed.width ?? natural.w,
+            h: proposed.height ?? natural.h
         )
     }
 
@@ -177,7 +180,7 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _TabSelectionNode,
     }
 }
 
-private final class _TabBarLayoutNode: _ContainerLayoutNode {
+private final class _TabBarLayoutNode: _ContainerLayoutNode, _RenderableLayoutNode {
     private let labelCount: Int
 
     init(labels: [any _LayoutNode], selectedIndex: Int) {
@@ -226,5 +229,17 @@ private final class _TabBarLayoutNode: _ContainerLayoutNode {
             child.layout(in: Rect(x: x, y: rect.y, w: width, h: min(size.h, rect.h)))
             x += width
         }
+    }
+
+    func draw(to canvas: Canvas, environment: EnvironmentValues) {
+        guard frame.w > 0, frame.h > 0 else { return }
+        let row = String(repeating: " ", count: frame.w)
+        canvas.drawText(
+            x: frame.x,
+            y: frame.y,
+            text: row,
+            foreground: environment.foregroundColor ?? .white,
+            background: environment.backgroundColor ?? .rgb(17, 25, 42)
+        )
     }
 }

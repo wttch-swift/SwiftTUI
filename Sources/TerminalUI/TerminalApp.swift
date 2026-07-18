@@ -13,6 +13,7 @@ public final class TerminalApp {
     private var focusedNodeIndex: Int?
     /// 区分“尚未选择过焦点”和“用户按 Esc 主动清空焦点”。
     private var didInitializeFocus = false
+    private var isModalFocusScopeActive = false
 
     public init<Content: View>(width: Int, height: Int, @ViewBuilder content: () -> Content) {
         self.width = width
@@ -43,11 +44,15 @@ public final class TerminalApp {
     private func render(to canvas: Canvas, cache: RenderCache?) {
         let bounds = Rect(x: 0, y: 0, w: width, h: height)
         let node = root._makeLayoutNode()
-        // 声明式 View 每帧都会生成新节点，先迁移交互状态，再统一校正焦点。
-        restoreFocusableState(from: renderedRoot, to: node)
+        // GeometryReader 这类节点会在 layout 阶段才按最终尺寸展开子树。焦点与
+        // 滚动状态都必须在这之后迁移，否则聊天页这类 GeometryReader 内的
+        // ScrollView 会在焦点遍历时不可见，表现成 Tab 怎么也进不去。
         restoreTabSelection(from: renderedRoot, to: node)
+        node.layout(in: bounds)
+        restoreInteractionState(from: renderedRoot, to: node)
         synchronizeFocus(in: node)
-        Render.render(node, in: bounds, to: canvas, cache: cache)
+        node.layout(in: bounds)
+        Render.drawLaidOut(node, to: canvas, cache: cache)
         renderedRoot = node
     }
 
@@ -172,7 +177,7 @@ public final class TerminalApp {
                 case .terminal(let terminalEvent):
                     switch terminalEvent {
                     case .key(let key):
-                        if dispatchKeyEvent(key).requestsRender {
+                        if dispatchKeyEvent(key).consumesEvent {
                             needsRender = true
                         }
                     case .signal(let signal):
@@ -261,6 +266,13 @@ public final class TerminalApp {
     }
 
     private func synchronizeFocus(in root: any _LayoutNode) {
+        let modalFocusScopeActive = containsActiveModalFocusScope(in: root)
+        if modalFocusScopeActive != isModalFocusScopeActive {
+            focusedNodeIndex = nil
+            didInitializeFocus = false
+            isModalFocusScopeActive = modalFocusScopeActive
+        }
+
         let nodes = focusableNodes(in: root)
         guard !nodes.isEmpty else {
             focusedNodeIndex = nil
@@ -277,8 +289,11 @@ public final class TerminalApp {
             focusedNodeIndex = requested
             didInitializeFocus = true
         } else if !boundIndices.isEmpty {
-            // 存在 FocusState 修饰但没有值请求焦点时，保持全局失焦。
-            focusedNodeIndex = nil
+            // 普通页面里，FocusState 全为空表示显式无焦点；但 modal sheet 是新的
+            // 焦点范围，打开时应自动进入第一个字段，否则第一次 Tab 看起来像被吞。
+            focusedNodeIndex = modalFocusScopeActive && !didInitializeFocus
+                ? boundIndices.first
+                : nil
             didInitializeFocus = true
         } else if !didInitializeFocus {
             // 首次出现焦点节点时默认选择第一个，保持现有 TextField 使用体验。
@@ -291,6 +306,14 @@ public final class TerminalApp {
         for (index, node) in nodes.enumerated() {
             node.setFocused(index == focusedNodeIndex)
         }
+    }
+
+    private func containsActiveModalFocusScope(in node: any _LayoutNode) -> Bool {
+        if (node as? any _ModalFocusScopeLayoutNode)?.isModalFocusScopeActive == true {
+            return true
+        }
+        guard let container = node as? _ContainerLayoutNode else { return false }
+        return container.children.contains(where: containsActiveModalFocusScope)
     }
 
     private func moveFocus(in root: any _LayoutNode, backwards: Bool) -> KeyPress.Result {
@@ -315,13 +338,13 @@ public final class TerminalApp {
         return .handled
     }
 
-    private func restoreFocusableState(
+    private func restoreInteractionState(
         from previousRoot: (any _LayoutNode)?,
         to currentRoot: any _LayoutNode
     ) {
         guard let previousRoot else { return }
-        let previous = focusableNodes(in: previousRoot)
-        let current = focusableNodes(in: currentRoot)
+        let previous = focusTargetNodes(in: previousRoot)
+        let current = focusTargetNodes(in: currentRoot)
         // 当前没有稳定 View identity，暂以深度优先遍历顺序配对。插入或删除焦点
         // 节点时，同步焦点会再校正索引；未来引入 identity 后可替换此配对策略。
         for (old, new) in zip(previous, current) {
@@ -378,6 +401,26 @@ public final class TerminalApp {
                 ?? container.children
             for child in children {
                 result.append(contentsOf: focusableNodes(in: child))
+            }
+        }
+        return result
+    }
+
+    private func focusTargetNodes(in node: any _LayoutNode) -> [any _FocusTargetLayoutNode] {
+        // FocusState 包装节点是交互状态边界；恢复它即可由包装节点转发给内部目标，
+        // 不再继续递归，避免同一个 TextField 被恢复两次。
+        if let binding = node as? any _FocusBindingLayoutNode {
+            return [binding]
+        }
+        var result: [any _FocusTargetLayoutNode] = []
+        if let focusTarget = node as? any _FocusTargetLayoutNode {
+            result.append(focusTarget)
+        }
+        if let container = node as? _ContainerLayoutNode {
+            let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
+                ?? container.children
+            for child in children {
+                result.append(contentsOf: focusTargetNodes(in: child))
             }
         }
         return result

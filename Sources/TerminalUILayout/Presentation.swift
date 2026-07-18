@@ -99,7 +99,8 @@ private final class _ToastSurfaceNode: _UnaryLayoutNode, _RenderableLayoutNode {
     }
 }
 
-private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLayoutNode {
+private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLayoutNode,
+    _ModalFocusScopeLayoutNode {
     private let base: any _LayoutNode
     private let presented: (any _LayoutNode)?
     private let blocker: _KeyPressNode?
@@ -109,6 +110,10 @@ private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLa
     var focusScopeChildren: [any _LayoutNode] {
         if isModal, let presented { return [presented] }
         return children
+    }
+
+    var isModalFocusScopeActive: Bool {
+        isModal && presented != nil
     }
 
     init(

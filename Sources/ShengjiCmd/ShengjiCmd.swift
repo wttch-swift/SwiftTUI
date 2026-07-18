@@ -55,11 +55,28 @@ private struct ChatMessage: Identifiable {
     let timestamp: String
 }
 
+private struct ChatConversation: Identifiable {
+    let id: Int
+    var title: String
+    var summary: String
+    var updatedAt: String
+    var messages: [ChatMessage]
+}
+
+private struct SelectedMessageKey: Hashable {
+    let conversationID: Int
+    let messageID: Int
+}
+
 private struct ObservatoryDemo: View {
     private enum Field: Hashable {
         case operatorNote
         case chatHistory
         case chatMessage
+        case deepseekKey
+        case deepseekPrompt
+        case hexoRepoPath
+        case markdownTitle
     }
 
     let isWide: Bool
@@ -72,28 +89,120 @@ private struct ObservatoryDemo: View {
     @State private var operatorNote = ""
     @State private var savedNote = "尚未保存操作备注。"
     @State private var chatDraft = ""
-    @State private var chatStatus = "回车发送 · ↑↓ 滚动 · 退出键离开输入框"
+    @State private var chatStatus = "Tab 聚焦记录/输入 · 记录区 ↑↓ 翻页 · A 配置 AI · X 选择回答"
     @State private var showsSheet = false
+    @State private var showsAIConfigSheet = false
+    @State private var showsMarkdownSheet = false
     @State private var showsToast = false
+    @State private var activeConversationID = 0
+    @State private var selectedMessageKeys: Set<SelectedMessageKey> = [
+        SelectedMessageKey(conversationID: 0, messageID: 2),
+        SelectedMessageKey(conversationID: 1, messageID: 1),
+    ]
+    @State private var isSelectingMessages = false
+    @State private var deepseekAPIKey = ""
+    @State private var deepseekSystemPrompt = "你是一个帮助我把聊天记录整理成 Hexo 博客草稿的写作助手。请保留事实、提炼结构，并使用中文 Markdown。"
+    @State private var hexoRepositoryPath = "~/workspace/blog"
+    @State private var markdownTitle = "一次终端 AI 助手的设计记录"
+    @State private var generatedMarkdown = "尚未生成 Markdown 草稿。"
+    @State private var draftStatus = "选择回答后按 G 生成草稿。"
     @FocusState private var focusedField: Field?
-    @State private var messages = [
-        ChatMessage(
+    @State private var conversations = [
+        ChatConversation(
             id: 0,
-            role: .assistant,
-            content: "欢迎来到轨道观测站。我可以介绍仪表盘、终端界面组件或当前服务快照。",
-            timestamp: "01:14"
+            title: "TerminalUI 渲染优化",
+            summary: "双缓冲、RenderCache、fingerprint 与 benchmark",
+            updatedAt: "今天 19:36",
+            messages: [
+                ChatMessage(
+                    id: 0,
+                    role: .assistant,
+                    content: "欢迎来到命令行写作助手。我可以把多段技术对话整理成 Hexo Markdown 草稿。",
+                    timestamp: "19:10"
+                ),
+                ChatMessage(
+                    id: 1,
+                    role: .user,
+                    content: "记录一下 RenderCache 和双缓冲的优化结论。",
+                    timestamp: "19:12"
+                ),
+                ChatMessage(
+                    id: 2,
+                    role: .assistant,
+                    content: "可以。当前渲染路径已经能统计 body 展开、layout、draw、fingerprint、cache lookup、paste 和输出生成等阶段。",
+                    timestamp: "19:12"
+                ),
+                ChatMessage(
+                    id: 3,
+                    role: .user,
+                    content: "如果后续要写成博客，哪些结论值得保留？",
+                    timestamp: "19:18"
+                ),
+                ChatMessage(
+                    id: 4,
+                    role: .assistant,
+                    content: "最值得保留的是优化链路：先做按行 diff 减少输出，再用双缓冲减少 Canvas 分配，最后用 RenderCache 复用稳定叶子节点的 cell 快照。",
+                    timestamp: "19:18"
+                ),
+                ChatMessage(
+                    id: 5,
+                    role: .assistant,
+                    content: "benchmark 也很重要。它把完整帧拆成清空画布、View body 展开、布局、渲染遍历、输出生成和缓存内部耗时，因此能解释每一步为什么变快。",
+                    timestamp: "19:19"
+                ),
+                ChatMessage(
+                    id: 6,
+                    role: .user,
+                    content: "那焦点和事件系统怎么描述？",
+                    timestamp: "19:22"
+                ),
+                ChatMessage(
+                    id: 7,
+                    role: .assistant,
+                    content: "可以写成第二节：统一事件队列负责收敛键盘、信号、状态变化和自定义消息；事件被消费后停止传播，主循环在事件批处理后统一重绘。",
+                    timestamp: "19:22"
+                ),
+            ]
         ),
-        ChatMessage(
+        ChatConversation(
             id: 1,
-            role: .user,
-            content: "当前网络状态怎么样？",
-            timestamp: "01:15"
+            title: "SwiftUI 风格事件系统",
+            summary: "统一事件队列、onEvent、消费后停止传播",
+            updatedAt: "今天 19:40",
+            messages: [
+                ChatMessage(
+                    id: 0,
+                    role: .user,
+                    content: "事件队列能不能做成 SwiftUI 风格的 onEvent？",
+                    timestamp: "19:30"
+                ),
+                ChatMessage(
+                    id: 1,
+                    role: .assistant,
+                    content: "可以。内部保留 TerminalRuntimeEvent，公开给视图的是 TerminalEvent，并提供 onEvent、onResize、onSignal 和 onMessage。",
+                    timestamp: "19:31"
+                ),
+            ]
         ),
-        ChatMessage(
+        ChatConversation(
             id: 2,
-            role: .assistant,
-            content: "四项服务均可用。事件流正在同步，负载为 81%；其余节点状态正常，延迟均低于 45 毫秒。",
-            timestamp: "01:15"
+            title: "Hexo 发布流程",
+            summary: "把生成的 Markdown 放入 Hexo 仓库，由 GitHub Actions 发布",
+            updatedAt: "待整理",
+            messages: [
+                ChatMessage(
+                    id: 0,
+                    role: .user,
+                    content: "最终草稿要放到 Hexo 仓库中，由 GitHub Actions 自动发布。",
+                    timestamp: "19:45"
+                ),
+                ChatMessage(
+                    id: 1,
+                    role: .assistant,
+                    content: "后续可以把生成草稿写入 source/_posts，再由仓库已有 workflow 完成构建发布。",
+                    timestamp: "19:45"
+                ),
+            ]
         ),
     ]
 
@@ -122,7 +231,7 @@ private struct ObservatoryDemo: View {
             Spacer()
                 .backgroundColor(.rgb(8, 13, 24))
 
-            TabView(selection: $selection) {
+            TabView(selection: tabSelection) {
                 overviewPage
                     .tabItem { Text("◇ 概览") }
                     .tag(ObservatoryTab.overview)
@@ -158,6 +267,12 @@ private struct ObservatoryDemo: View {
                 Text("按退出键关闭")
                     .foregroundColor(.brightYellow)
             }
+        }
+        .sheet(isPresented: $showsAIConfigSheet, alignment: .center) {
+            aiConfigSheet
+        }
+        .sheet(isPresented: $showsMarkdownSheet, alignment: .center) {
+            markdownDraftSheet
         }
         .toast(isPresented: $showsToast, alignment: .topTrailing) {
             Text("✓ 快照已刷新 #\(refreshCount)")
@@ -218,6 +333,27 @@ private struct ObservatoryDemo: View {
                 statusBar(hint: "R 刷新提示 · S 弹出框 · 空格 暂停/继续")
             }
         }
+    }
+
+    private var tabSelection: Binding<ObservatoryTab> {
+        Binding(
+            get: { selection },
+            set: { newSelection in
+                selection = newSelection
+                switch newSelection {
+                case .chat:
+                    if focusedField != .chatHistory && focusedField != .chatMessage {
+                        focusedField = .chatHistory
+                    }
+                case .settings:
+                    if focusedField == .chatHistory || focusedField == .chatMessage {
+                        focusedField = nil
+                    }
+                case .overview, .activity:
+                    focusedField = nil
+                }
+            }
+        )
     }
 
     private var activityPage: some View {
@@ -336,64 +472,196 @@ private struct ObservatoryDemo: View {
     }
 
     private var chatPage: some View {
-        VStack {
-            masthead(section: "智能助手", detail: "本地模拟")
-            Spacer(height: 1)
+        GeometryReader { geometry in
+            let historyWidth = isWide ? 34 : 0
+            let gapWidth = isWide ? 2 : 0
+            let conversationWidth = max(32, geometry.size.w - historyWidth - gapWidth)
+            let messageHeight = max(8, geometry.size.h - 10)
+            let historyHeight = max(8, geometry.size.h - 8)
 
-            HStack {
-                if isWide {
-                    GroupBox("快捷提问", style: .rounded) {
-                        Text("01  介绍这个仪表盘")
-                            .foregroundColor(.brightWhite)
-                        Spacer(height: 1)
-                        Text("02  总结服务健康状态")
-                            .foregroundColor(.brightWhite)
-                        Spacer(height: 1)
-                        Text("03  讲解终端界面组件")
-                            .foregroundColor(.brightWhite)
-                        Spacer()
-                        Text("本地运行 · 无需联网")
-                            .foregroundColor(.brightGreen)
-                    }
-                    .frame(width: 30)
-                    .foregroundColor(.brightMagenta)
-                    Spacer(width: 2)
-                }
+            VStack {
+                masthead(section: "DeepSeek 写作助手", detail: "对话 → 选择 → Markdown → Hexo")
+                Spacer(height: 1)
 
-                VStack {
-                    ScrollView(.vertical) {
-                        VStack(alignment: .leading) {
-                            ForEach(messages) { message in
-                                ChatMessageView(message: message)
-                                Spacer(height: 1)
+                HStack {
+                    if isWide {
+                        GroupBox("历史对话", style: .rounded) {
+                            ScrollView(.vertical) {
+                                VStack(alignment: .leading) {
+                                    ForEach(conversations) { conversation in
+                                        conversationRow(conversation)
+                                        Spacer(height: 1)
+                                    }
+                                }
                             }
+                            .frame(height: historyHeight)
+
+                            Text("数字键打开对话 · X 选择当前对话中的回答")
+                                .foregroundColor(.rgb(100, 116, 139))
                         }
+                        .frame(width: historyWidth)
+                        .foregroundColor(.brightMagenta)
+                        Spacer(width: gapWidth)
                     }
-                    .frame(height: isWide ? 16 : 13)
-                    .bordered(.rgb(51, 65, 85), style: .rounded)
-                    .focused($focusedField, equals: .chatHistory)
 
-                    HStack(alignment: .center) {
-                        Text("❯")
-                            .foregroundColor(.brightCyan)
-                            .bold()
-                        Spacer(width: 1)
-                        TextField(
-                            "向观测站提问……",
-                            text: $chatDraft,
-                            onCommit: sendChatMessage
-                        )
-                        .focused($focusedField, equals: .chatMessage)
+                    VStack {
+                        GroupBox(currentConversationTitle, style: .rounded) {
+                            ScrollView(.vertical) {
+                                VStack(alignment: .leading) {
+                                    ForEach(currentMessages) { message in
+                                        SelectableChatMessageView(
+                                            message: message,
+                                            index: messageSelectionNumber(for: message),
+                                            isSelecting: isSelectingMessages,
+                                            isSelected: isMessageSelected(message)
+                                        )
+                                        Spacer(height: 1)
+                                    }
+                                }
+                            }
+                            .frame(height: messageHeight)
+                            .focused($focusedField, equals: .chatHistory)
+                        }
+                        .foregroundColor(.rgb(71, 85, 105))
+                        .accentColor(.brightCyan)
+
+                        HStack(alignment: .center) {
+                            Text("❯")
+                                .foregroundColor(.brightCyan)
+                                .bold()
+                            Spacer(width: 1)
+                            TextField(
+                                "输入消息，回车发送到当前对话……",
+                                text: $chatDraft,
+                                onCommit: sendChatMessage
+                            )
+                            .focused($focusedField, equals: .chatMessage)
+                        }
+                        .padding(horizontal: 1)
+                        .frame(height: 3, alignment: .center)
+                        .bordered(.brightCyan, style: .rounded)
                     }
-                    .padding(horizontal: 1)
-                    .frame(height: 3, alignment: .center)
-                    .bordered(.brightCyan, style: .rounded)
+                    .frame(width: conversationWidth)
                 }
-            }
 
-            Spacer()
-            statusBar(hint: chatStatus)
+                Spacer(height: 1)
+                HStack {
+                    Text(deepseekAPIKey.isEmpty ? "DeepSeek Key 未配置" : "DeepSeek Key 已配置")
+                        .foregroundColor(deepseekAPIKey.isEmpty ? .brightYellow : .brightGreen)
+                    Spacer(width: 2)
+                    Text("选中 \(selectedMessageKeys.count) 条回答")
+                        .foregroundColor(.brightCyan)
+                    Spacer(width: 2)
+                    Text("Hexo: \(hexoRepositoryPath)")
+                        .foregroundColor(.rgb(148, 163, 184))
+                    Spacer()
+                }
+                Spacer()
+                statusBar(hint: chatStatus)
+            }
         }
+    }
+
+    private var aiConfigSheet: some View {
+        VStack(alignment: .leading) {
+            Text("DeepSeek 与 Hexo 配置")
+                .foregroundColor(.brightWhite)
+                .bold()
+            Spacer(height: 1)
+            Text("API Key")
+                .foregroundColor(.rgb(100, 116, 139))
+            TextField("sk-...", text: $deepseekAPIKey)
+                .focused($focusedField, equals: .deepseekKey)
+                .bordered(.brightCyan, style: .rounded)
+            Spacer(height: 1)
+            Text("系统 Prompt")
+                .foregroundColor(.rgb(100, 116, 139))
+            TextField("整理聊天记录的写作要求", text: $deepseekSystemPrompt)
+                .focused($focusedField, equals: .deepseekPrompt)
+                .bordered(.brightMagenta, style: .rounded)
+            Spacer(height: 1)
+            Text("Hexo 仓库路径")
+                .foregroundColor(.rgb(100, 116, 139))
+            TextField("~/workspace/blog", text: $hexoRepositoryPath)
+                .focused($focusedField, equals: .hexoRepoPath)
+                .bordered(.brightGreen, style: .rounded)
+            Spacer(height: 1)
+            Text("Esc 关闭 · 当前只保存到界面状态，后续接入配置文件。")
+                .foregroundColor(.brightYellow)
+        }
+        .frame(width: 76)
+    }
+
+    private var markdownDraftSheet: some View {
+        VStack(alignment: .leading) {
+            Text("Markdown 草稿预览")
+                .foregroundColor(.brightWhite)
+                .bold()
+            Spacer(height: 1)
+            TextField("文章标题", text: $markdownTitle)
+                .focused($focusedField, equals: .markdownTitle)
+                .bordered(.brightCyan, style: .rounded)
+            Spacer(height: 1)
+            ScrollView(.vertical) {
+                Text(generatedMarkdown)
+                    .foregroundColor(.rgb(203, 213, 225))
+            }
+            .frame(height: 14)
+            .bordered(.rgb(51, 65, 85), style: .rounded)
+            Spacer(height: 1)
+            Text(draftStatus)
+                .foregroundColor(.brightGreen)
+            Text("下一步可以把它写入 \(hexoRepositoryPath)/source/_posts。")
+                .foregroundColor(.rgb(100, 116, 139))
+        }
+        .frame(width: 86)
+    }
+
+    private var currentConversationTitle: String {
+        conversations.first(where: { $0.id == activeConversationID })?.title ?? "新对话"
+    }
+
+    private var currentMessages: [ChatMessage] {
+        conversations.first(where: { $0.id == activeConversationID })?.messages ?? []
+    }
+
+    private var selectableAssistantMessages: [ChatMessage] {
+        currentMessages.filter { $0.role == .assistant }
+    }
+
+    private func conversationRow(_ conversation: ChatConversation) -> some View {
+        let isActive = conversation.id == activeConversationID
+        return VStack(alignment: .leading) {
+            HStack {
+                Text("\(conversation.id + 1).")
+                    .foregroundColor(.rgb(100, 116, 139))
+                    .bold(isActive)
+                Spacer(width: 1)
+                Text(conversation.title)
+                    .foregroundColor(isActive ? .brightWhite : .rgb(203, 213, 225))
+                    .bold(isActive)
+                Spacer()
+            }
+            Text(conversation.summary)
+                .foregroundColor(.rgb(148, 163, 184))
+                .lineLimit(1)
+            Text(conversation.updatedAt)
+                .foregroundColor(.rgb(100, 116, 139))
+        }
+    }
+
+    private func messageSelectionNumber(for message: ChatMessage) -> Int? {
+        guard message.role == .assistant,
+              let index = selectableAssistantMessages.firstIndex(where: { $0.id == message.id }) else {
+            return nil
+        }
+        return index + 1
+    }
+
+    private func isMessageSelected(_ message: ChatMessage) -> Bool {
+        selectedMessageKeys.contains(
+            SelectedMessageKey(conversationID: activeConversationID, messageID: message.id)
+        )
     }
 
     private func masthead(section: String, detail: String) -> some View {
@@ -471,8 +739,13 @@ private struct ObservatoryDemo: View {
             return
         }
 
-        let nextID = (messages.map(\.id).max() ?? -1) + 1
-        messages += [
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }) else {
+            chatStatus = "没有找到当前对话。"
+            return
+        }
+
+        let nextID = (conversations[index].messages.map(\.id).max() ?? -1) + 1
+        conversations[index].messages += [
             ChatMessage(id: nextID, role: .user, content: prompt, timestamp: "现在"),
             ChatMessage(
                 id: nextID + 1,
@@ -481,22 +754,116 @@ private struct ObservatoryDemo: View {
                 timestamp: "现在"
             ),
         ]
+        conversations[index].summary = prompt
+        conversations[index].updatedAt = "刚刚"
         chatDraft = ""
-        chatStatus = "已生成本地回复 · 按结束键查看最新消息"
+        chatStatus = deepseekAPIKey.isEmpty
+            ? "已生成本地模拟回复 · 配置 Key 后可接 DeepSeek"
+            : "已生成回复 · 后续接入 DeepSeek API 请求"
     }
 
     private func chatResponse(to prompt: String) -> String {
         let value = prompt.lowercased()
-        if value.contains("health") || value.contains("service") || value.contains("状态") {
-            return "极光接口、向量仓库和边缘缓存均运行正常。事件流仍在同步，但延迟与负载都处于演示阈值以内。"
+        if value.contains("hexo") || value.contains("markdown") || value.contains("博客") {
+            return "可以先把选中的回答整理成 front matter + 正文结构，再写入 Hexo 仓库的 source/_posts。当前页面已经预留了标题、仓库路径和草稿预览。"
         }
-        if value.contains("terminalui") || value.contains("component") || value.contains("组件") {
-            return "这个页面将标签视图、滚动视图、输入框、分组框、数据循环、状态、绑定、堆栈、边框、颜色和键盘处理组合成一棵声明式视图树。"
+        if value.contains("deepseek") || value.contains("api") || value.contains("key") {
+            return "配置页会保存 DeepSeek API Key 和系统 Prompt。真正请求时建议通过统一事件队列回到主循环更新状态，避免后台线程直接绘制终端。"
         }
-        if value.contains("dashboard") || value.contains("仪表盘") {
-            return "“概览”展示实时指标，“动态”包含服务表格与事件流，“设置”则演示数据绑定和可编辑的操作备注。"
+        if value.contains("选择") || value.contains("整理") || value.contains("生成") {
+            return "按 X 可以进入回答选择模式，用数字键勾选当前对话中的某些助手回答，再按 G 生成 Markdown 草稿。"
         }
-        return "我收到了：\(prompt)\n\n这是一条本地模拟回复。将本地回复函数替换为异步模型请求，即可接入真正的智能服务。"
+        return "我收到了：\(prompt)\n\n这是一条本地模拟回复。后续把这里替换成 DeepSeek API 调用，就可以形成真正的命令行聊天软件。"
+    }
+
+    private func toggleMessageSelection(number: Int) -> Bool {
+        guard number > 0,
+              selectableAssistantMessages.indices.contains(number - 1) else {
+            return false
+        }
+        let message = selectableAssistantMessages[number - 1]
+        let key = SelectedMessageKey(conversationID: activeConversationID, messageID: message.id)
+        if selectedMessageKeys.contains(key) {
+            selectedMessageKeys.remove(key)
+            chatStatus = "已取消选择回答 #\(number)"
+        } else {
+            selectedMessageKeys.insert(key)
+            chatStatus = "已选择回答 #\(number)"
+        }
+        return true
+    }
+
+    private func activateConversation(number: Int) -> Bool {
+        guard number > 0,
+              let conversation = conversations.first(where: { $0.id == number - 1 }) else {
+            return false
+        }
+        activeConversationID = conversation.id
+        chatStatus = "已打开对话：\(conversation.title)"
+        return true
+    }
+
+    private func generateMarkdownDraft() {
+        let selectedEntries = conversations.flatMap { conversation in
+            conversation.messages.compactMap { message -> (ChatConversation, ChatMessage)? in
+                let key = SelectedMessageKey(conversationID: conversation.id, messageID: message.id)
+                guard selectedMessageKeys.contains(key) else { return nil }
+                return (conversation, message)
+            }
+        }
+        guard !selectedEntries.isEmpty else {
+            generatedMarkdown = "还没有选择任何回答。\n\n进入聊天页后按 X 开启选择模式，再用数字键勾选当前对话中的助手回答。"
+            draftStatus = "请先选择某些回答。"
+            showsMarkdownSheet = true
+            return
+        }
+
+        var grouped: [(ChatConversation, [ChatMessage])] = []
+        for (conversation, message) in selectedEntries {
+            if let index = grouped.firstIndex(where: { $0.0.id == conversation.id }) {
+                grouped[index].1.append(message)
+            } else {
+                grouped.append((conversation, [message]))
+            }
+        }
+        let body = grouped.map { conversation, messages in
+            let transcript = messages.map { message in
+                "- **选中回答**（\(message.timestamp)）：\(message.content)"
+            }.joined(separator: "\n")
+            return """
+            ## \(conversation.title)
+
+            > 来源摘要：\(conversation.summary)
+
+            \(transcript)
+            """
+        }.joined(separator: "\n\n")
+
+        generatedMarkdown = """
+        ---
+        title: \(markdownTitle)
+        date: \(Date())
+        tags:
+          - TerminalUI
+          - DeepSeek
+          - Hexo
+        ---
+
+        # \(markdownTitle)
+
+        这篇草稿由命令行聊天中被选中的回答整理而来。后续接入 DeepSeek API 后，这里会替换为模型润色后的文章结构。
+
+        \(body)
+
+        ## 后续修订清单
+
+        - [ ] 核对技术事实
+        - [ ] 补充代码片段
+        - [ ] 调整 Hexo front matter
+        - [ ] 写入 `source/_posts`
+        """
+        draftStatus = "已基于 \(selectedEntries.count) 条选中回答生成草稿。"
+        showsMarkdownSheet = true
     }
 
     private func statusBar(hint: String) -> some View {
@@ -540,13 +907,34 @@ private struct ObservatoryDemo: View {
             showsToast.toggle()
         case .character("s"):
             showsSheet = true
+        case .character("a"):
+            showsAIConfigSheet = true
+        case .character("x"):
+            isSelectingMessages.toggle()
+            chatStatus = isSelectingMessages
+                ? "回答选择模式：数字键勾选当前对话的助手回答 · G 生成 Markdown"
+                : "已退出回答选择模式。"
+        case .character("g"):
+            generateMarkdownDraft()
         case .character(" "):
             liveUpdates.toggle()
         case .character("1"):
+            if selection == .chat,
+               (isSelectingMessages ? toggleMessageSelection(number: 1) : activateConversation(number: 1)) {
+                break
+            }
             liveUpdates.toggle()
         case .character("2"):
+            if selection == .chat,
+               (isSelectingMessages ? toggleMessageSelection(number: 2) : activateConversation(number: 2)) {
+                break
+            }
             notifications.toggle()
         case .character("3"):
+            if selection == .chat,
+               (isSelectingMessages ? toggleMessageSelection(number: 3) : activateConversation(number: 3)) {
+                break
+            }
             compactRows.toggle()
         default:
             return .ignored
@@ -555,12 +943,15 @@ private struct ObservatoryDemo: View {
     }
 }
 
-private struct ChatMessageView: View {
+private struct SelectableChatMessageView: View {
     let message: ChatMessage
+    let index: Int?
+    let isSelecting: Bool
+    let isSelected: Bool
 
     var body: some View {
         GroupBox(
-            message.role == .assistant ? "◈ 观测站智能助手" : "◆ 你",
+            title,
             titleAlignment: .leading,
             style: .rounded
         ) {
@@ -573,5 +964,21 @@ private struct ChatMessageView: View {
             }
         }
         .foregroundColor(message.role == .assistant ? .brightCyan : .brightYellow)
+    }
+
+    private var title: String {
+        if message.role == .user {
+            return "◆ 你"
+        }
+        guard let index else {
+            return "◈ DeepSeek"
+        }
+        if isSelecting {
+            return "\(isSelected ? "[x]" : "[ ]") \(index). DeepSeek 回答"
+        }
+        if isSelected {
+            return "✓ \(index). DeepSeek 回答"
+        }
+        return "\(index). DeepSeek 回答"
     }
 }

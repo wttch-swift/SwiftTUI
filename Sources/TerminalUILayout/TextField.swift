@@ -157,7 +157,7 @@ private final class _TextFieldLayoutNode: _RenderReusableLayoutNode, _FocusableL
         let normalForeground = environment.foregroundColor ?? .white
 
         if characters.isEmpty {
-            // 聚焦时最左侧 cell 留给下划线光标，占位文字从其后开始显示。
+            // 聚焦时最左侧 cell 留给插入点光标，占位文字从其后开始显示。
             let placeholderX = frame.x + (isFocused ? 1 : 0)
             let placeholderWidth = max(0, frame.w - (isFocused ? 1 : 0))
             let placeholder = title.truncated(toWidth: placeholderWidth)
@@ -216,7 +216,7 @@ private final class _TextFieldLayoutNode: _RenderReusableLayoutNode, _FocusableL
             state.scrollIndex = cursor
         }
 
-        // 光标位于文本末尾时也需要为下划线保留一个 cell，因此使用 >=。
+        // 光标位于文本末尾时也需要为插入点保留一个 cell，因此使用 >=。
         while state.scrollIndex < cursor,
               displayWidth(characters[state.scrollIndex..<cursor]) >= width {
             state.scrollIndex += 1
@@ -254,11 +254,12 @@ private final class _TextFieldLayoutNode: _RenderReusableLayoutNode, _FocusableL
         to canvas: Canvas,
         environment: EnvironmentValues
     ) {
-        // TextField 不绘制背景；下划线继承环境背景，仅用前景色突出焦点。
+        // TextField 不绘制背景；使用细竖条模拟文本插入点，避免光标
+        // 在带边框输入框里看起来像内容或底边的一部分。
         canvas.drawText(
             x: x,
             y: frame.y,
-            text: "_",
+            text: "▏",
             foreground: environment._focusBorderColor,
             background: environment.backgroundColor,
             bold: environment._isBold,

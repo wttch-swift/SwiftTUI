@@ -55,7 +55,7 @@ func layout(in rect: Rect)
 
 - Stack：测量子节点，分配固定空间与 Spacer 剩余空间，并按 alignment 定位。
 - Text：按 cell 宽度换行，尊重显式换行和 lineLimit，空间不足时添加省略号。
-- TextField：维护 grapheme 级光标和水平视口，焦点时在最后字符后显示下划线光标。
+- TextField：维护 grapheme 级光标和水平视口，焦点时在当前插入位置显示细竖条光标。
 - ScrollView：分别维护内容尺寸、视口、滚动上限和偏移，并提供裁剪区域。
 - Table：测量列内容、共享边框连接点，并在约束宽度内换行。
 - Presentation：通过 Z 轴布局显示 sheet/toast，并隔离模态焦点范围。

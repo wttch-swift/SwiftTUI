@@ -73,6 +73,52 @@ private struct IncrementalRefreshBenchmarkView: View {
     }
 }
 
+private struct RebuiltScrollBenchmarkView: View {
+    let text: Binding<String>
+
+    var body: some View {
+        VStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack {
+                    ForEach(0..<4) { value in
+                        Text("\(value)")
+                    }
+                }
+            }
+            .frame(height: 2)
+
+            TextField("Input", text: text)
+        }
+    }
+}
+
+private struct RebuiltFocusedScrollBenchmarkView: View {
+    enum Target: Hashable {
+        case history
+        case input
+    }
+
+    let focus: FocusState<Target?>
+    let text: Binding<String>
+
+    var body: some View {
+        VStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack {
+                    ForEach(0..<4) { value in
+                        Text("\(value)")
+                    }
+                }
+            }
+            .frame(height: 2)
+            .focused(focus.projectedValue, equals: .history)
+
+            TextField("Input", text: text)
+                .focused(focus.projectedValue, equals: .input)
+        }
+    }
+}
+
 private func benchmarkAverageNanoseconds(iterations: Int, _ operation: () -> Void) -> UInt64 {
     // 单次渲染很容易受到调度和计时器抖动影响，所以每个 round 内先循环多次，
     // 再取“本 round 平均值”。外层 benchmarkSamples 再用多个 round 给出 min/avg/max。
@@ -214,6 +260,66 @@ private func renderIncrementalBenchmarkCanvas(
         #expect(!isPresented)
         #expect(dismissCount == 1)
     }
+}
+
+@Test func sheetAllowsTabToMoveFocusInsidePresentedContent() {
+    var isPresented = true
+    var first = ""
+    var second = ""
+    let app = TerminalApp(width: 24, height: 8) {
+        Text("底层")
+            .sheet(isPresented: Binding(get: { isPresented }, set: { isPresented = $0 })) {
+                VStack {
+                    TextField("First", text: Binding(get: { first }, set: { first = $0 }))
+                    TextField("Second", text: Binding(get: { second }, set: { second = $0 }))
+                }
+            }
+    }
+
+    _ = app.render()
+    #expect(app.send(KeyPress(key: .character("A"), characters: "A")) == .handled)
+    #expect(first == "A")
+    #expect(second == "")
+
+    #expect(app.send(KeyPress(key: .tab, characters: "\t")) == .handled)
+    #expect(app.send(KeyPress(key: .character("B"), characters: "B")) == .handled)
+    #expect(first == "A")
+    #expect(second == "B")
+}
+
+@Test func sheetInitializesFocusStateFieldsBeforeTabMovesFocus() {
+    enum SheetField: Hashable {
+        case first
+        case second
+    }
+
+    var isPresented = true
+    var first = ""
+    var second = ""
+    let focus = FocusState<SheetField?>()
+    let app = TerminalApp(width: 24, height: 8) {
+        Text("底层")
+            .sheet(isPresented: Binding(get: { isPresented }, set: { isPresented = $0 })) {
+                VStack {
+                    TextField("First", text: Binding(get: { first }, set: { first = $0 }))
+                        .focused(focus.projectedValue, equals: .first)
+                    TextField("Second", text: Binding(get: { second }, set: { second = $0 }))
+                        .focused(focus.projectedValue, equals: .second)
+                }
+            }
+    }
+
+    _ = app.render()
+    #expect(focus.wrappedValue == .first)
+    #expect(app.send(KeyPress(key: .character("A"), characters: "A")) == .handled)
+    #expect(first == "A")
+    #expect(second == "")
+
+    #expect(app.send(KeyPress(key: .tab, characters: "\t")) == .handled)
+    #expect(focus.wrappedValue == .second)
+    #expect(app.send(KeyPress(key: .character("B"), characters: "B")) == .handled)
+    #expect(first == "A")
+    #expect(second == "B")
 }
 
 @Test func toastUsesAlignmentWithoutBlockingUnderlyingContent() {
@@ -1333,6 +1439,241 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(inputFocused.grid[0][3].style.foregroundColor != .brightCyan)
 }
 
+@Test func unmanagedScrollViewReceivesArrowKeysBubbledFromFocusedTextField() {
+    let text = State(wrappedValue: "")
+    let app = TerminalApp(width: 5, height: 3) {
+        VStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack {
+                    ForEach(0..<4) { value in
+                        Text("\(value)")
+                    }
+                }
+            }
+            .frame(height: 2)
+
+            TextField("Input", text: text.projectedValue)
+        }
+    }
+
+    let initial = app.render()
+    #expect(initial.grid[0][0].char == "0")
+    #expect(app.send(KeyPress(key: .downArrow)) == .handled)
+    let scrolled = app.render()
+    #expect(scrolled.grid[0][0].char == "1")
+}
+
+@Test func rebuiltUnmanagedScrollViewRestoresOffsetAcrossRenderPasses() {
+    let text = State(wrappedValue: "")
+    let app = TerminalApp(width: 5, height: 3) {
+        RebuiltScrollBenchmarkView(text: text.projectedValue)
+    }
+
+    let initial = app.render()
+    #expect(initial.grid[0][0].char == "0")
+    #expect(app.send(KeyPress(key: .downArrow)) == .handled)
+    let scrolled = app.render()
+    #expect(scrolled.grid[0][0].char == "1")
+}
+
+@Test func rebuiltFocusedScrollViewCanReceiveFocusAndRestoreOffset() {
+    let focus = FocusState<RebuiltFocusedScrollBenchmarkView.Target?>(wrappedValue: .history)
+    let text = State(wrappedValue: "")
+    let app = TerminalApp(width: 5, height: 3) {
+        RebuiltFocusedScrollBenchmarkView(focus: focus, text: text.projectedValue)
+    }
+
+    let initial = app.render()
+    #expect(focus.wrappedValue == .history)
+    #expect(initial.grid[0][0].char == "0")
+
+    #expect(app.send(KeyPress(key: .downArrow)) == .handled)
+    let scrolled = app.render()
+    #expect(scrolled.grid[0][0].char == "1")
+
+    #expect(app.send(KeyPress(key: .tab, characters: "\t")) == .handled)
+    #expect(focus.wrappedValue == .input)
+}
+
+@Test func focusedScrollViewInsideGroupBoxHighlightsAndScrolls() {
+    enum Target: Hashable {
+        case history
+        case input
+    }
+
+    let focus = FocusState<Target?>()
+    let text = State(wrappedValue: "")
+    let app = TerminalApp(width: 9, height: 6) {
+        VStack {
+            GroupBox("History") {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack {
+                        ForEach(0..<4) { value in
+                            Text("\(value)")
+                        }
+                    }
+                }
+                .frame(height: 2)
+                .focused(focus.projectedValue, equals: .history)
+            }
+            .foregroundColor(.gray)
+            .accentColor(.brightCyan)
+
+            TextField("Input", text: text.projectedValue)
+                .focused(focus.projectedValue, equals: .input)
+        }
+    }
+
+    _ = app.render()
+    #expect(app.send(KeyPress(key: .tab, characters: "\t")) == .handled)
+    #expect(focus.wrappedValue == .history)
+    let focused = app.render()
+    #expect(focused.grid[0][0].style.foregroundColor == .brightCyan)
+
+    #expect(app.send(KeyPress(key: .downArrow)) == .handled)
+    let scrolled = app.render()
+    #expect(scrolled.grid[1][1].char == "1")
+}
+
+@Test func tabViewPageCanFocusScrollViewInsideGroupBoxAfterSwitchingTabs() {
+    enum Page: Hashable {
+        case settings
+        case chat
+    }
+    enum Target: Hashable {
+        case setting
+        case history
+        case input
+    }
+
+    var page = Page.settings
+    let focus = FocusState<Target?>()
+    let setting = State(wrappedValue: "")
+    let input = State(wrappedValue: "")
+    let app = TerminalApp(width: 18, height: 8) {
+        TabView(selection: Binding(get: { page }, set: { page = $0 })) {
+            TextField("Setting", text: setting.projectedValue)
+                .focused(focus.projectedValue, equals: .setting)
+                .tag(Page.settings)
+                .tabItem { Text("Settings") }
+
+            VStack {
+                GroupBox("History") {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack {
+                            ForEach(0..<4) { value in
+                                Text("\(value)")
+                            }
+                        }
+                    }
+                    .frame(height: 2)
+                    .focused(focus.projectedValue, equals: .history)
+                }
+                .foregroundColor(.gray)
+                .accentColor(.brightCyan)
+
+                TextField("Input", text: input.projectedValue)
+                    .focused(focus.projectedValue, equals: .input)
+            }
+            .tag(Page.chat)
+            .tabItem { Text("Chat") }
+        }
+    }
+
+    _ = app.render()
+    #expect(app.send(KeyPress(key: .rightArrow)) == .handled)
+    _ = app.render()
+    #expect(page == .chat)
+    #expect(app.send(KeyPress(key: .tab, characters: "\t")) == .handled)
+    #expect(focus.wrappedValue == .history)
+    let focused = app.render()
+    #expect(focused.grid[1][0].style.foregroundColor == .brightCyan)
+
+    #expect(app.send(KeyPress(key: .downArrow)) == .handled)
+    let scrolled = app.render()
+    #expect(scrolled.grid[2][1].char == "1")
+}
+
+@Test func chatLikeTabPageFocusesHistoryScrollViewWhenSelectionBindingSetsFocus() {
+    enum Page: Hashable {
+        case overview
+        case chat
+    }
+    enum Target: Hashable {
+        case history
+        case input
+    }
+
+    var page = Page.overview
+    let focus = FocusState<Target?>()
+    let input = State(wrappedValue: "")
+    let selection = Binding<Page>(
+        get: { page },
+        set: { newPage in
+            page = newPage
+            focus.wrappedValue = newPage == .chat ? .history : nil
+        }
+    )
+    let app = TerminalApp(width: 54, height: 14) {
+        TabView(selection: selection) {
+            Text("Overview")
+                .tag(Page.overview)
+                .tabItem { Text("Overview") }
+
+            GeometryReader { geometry in
+                let historyWidth = 16
+                let gapWidth = 2
+                let conversationWidth = max(20, geometry.size.w - historyWidth - gapWidth)
+                HStack {
+                    GroupBox("History") {
+                        Text("Old")
+                    }
+                    .frame(width: historyWidth)
+                    .foregroundColor(.brightMagenta)
+
+                    Spacer(width: gapWidth)
+
+                    VStack {
+                        GroupBox("Conversation") {
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(alignment: .leading) {
+                                    ForEach(0..<8) { value in
+                                        Text("Message \(value)")
+                                        Spacer(height: 1)
+                                    }
+                                }
+                            }
+                            .frame(height: 4)
+                            .focused(focus.projectedValue, equals: .history)
+                        }
+                        .foregroundColor(.rgb(71, 85, 105))
+                        .accentColor(.brightCyan)
+
+                        TextField("Input", text: input.projectedValue)
+                            .focused(focus.projectedValue, equals: .input)
+                    }
+                    .frame(width: conversationWidth)
+                }
+            }
+            .tag(Page.chat)
+            .tabItem { Text("Chat") }
+        }
+    }
+
+    _ = app.render()
+    #expect(app.send(KeyPress(key: .rightArrow)) == .handled)
+    let focused = app.render()
+    #expect(page == .chat)
+    #expect(focus.wrappedValue == .history)
+    let focusedForegroundColors = focused.grid.flatMap { row in
+        row.map(\.style.foregroundColor)
+    }
+    #expect(focusedForegroundColors.contains(.brightCyan))
+
+    #expect(app.send(KeyPress(key: .downArrow)) == .handled)
+    _ = app.render()
+}
+
 @Test func scrollViewClipsChildBordersToItsViewport() {
     let canvas = Canvas(width: 5, height: 3)
     let view = ScrollView(.vertical, showsIndicators: false) {
@@ -1422,7 +1763,7 @@ private func renderIncrementalBenchmarkCanvas(
     }
 
     let initial = app.render()
-    #expect(initial.grid[0][1].char == "_")
+    #expect(initial.grid[0][1].char == "▏")
     #expect(editingChanges == [true])
 
     #expect(app.send(KeyPress(key: .escape, characters: "\u{1B}")) == .handled)
@@ -1458,7 +1799,7 @@ private func renderIncrementalBenchmarkCanvas(
 
     let initial = app.render()
     #expect(initial.grid[0][1].char == " ")
-    #expect(initial.grid[1][1].char == "_")
+    #expect(initial.grid[1][1].char == "▏")
     #expect(app.send(KeyPress(key: .character("X"), characters: "X")) == .handled)
     #expect(second.wrappedValue == "BX")
 
@@ -1481,7 +1822,7 @@ private func renderIncrementalBenchmarkCanvas(
     }
 
     let initial = app.render()
-    #expect(initial.grid[0][0].char != "_")
+    #expect(initial.grid[0][0].char != "▏")
     #expect(focus.wrappedValue == false)
 
     #expect(app.send(KeyPress(key: .tab, characters: "\t")) == .handled)
@@ -1523,6 +1864,25 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(disabled.render().grid[0][0].style.foregroundColor == .magenta)
 }
 
+@Test func accentColorDrivesFocusedBorderAndTextFieldCursor() {
+    let borderedValue = State(wrappedValue: "A")
+    let bordered = TerminalApp(width: 5, height: 3) {
+        TextField("Value", text: borderedValue.projectedValue)
+            .bordered(.gray)
+            .accentColor(.brightMagenta)
+    }
+    #expect(bordered.render().grid[0][0].style.foregroundColor == .brightMagenta)
+
+    let cursorValue = State(wrappedValue: "")
+    let cursor = TerminalApp(width: 6, height: 1) {
+        TextField("Value", text: cursorValue.projectedValue)
+            .accentColor(.brightGreen)
+    }
+    let focused = cursor.render()
+    #expect(focused.grid[0][0].char == "▏")
+    #expect(focused.grid[0][0].style.foregroundColor == .brightGreen)
+}
+
 @Test func groupBoxBackgroundBorderUsesTheSharedFocusEffect() {
     let value = State(wrappedValue: "A")
     let app = TerminalApp(width: 9, height: 5) {
@@ -1548,7 +1908,7 @@ private func renderIncrementalBenchmarkCanvas(
     }
     let placeholder = placeholderApp.render()
 
-    #expect(String(placeholder.grid[0].map(\.char)) == "_Nam")
+    #expect(String(placeholder.grid[0].map(\.char)) == "▏Nam")
     #expect(placeholder.grid[0][0].style.foregroundColor == .brightCyan)
     #expect(placeholder.grid[0][0].style.backgroundColor == .black)
     #expect(placeholder.grid[0][1].style.foregroundColor == .gray)
@@ -1558,10 +1918,10 @@ private func renderIncrementalBenchmarkCanvas(
     let scrollingApp = TerminalApp(width: 3, height: 1) {
         TextField("值", text: long.projectedValue)
     }
-    #expect(String(scrollingApp.render().grid[0].map(\.char)) == "DE_")
+    #expect(String(scrollingApp.render().grid[0].map(\.char)) == "DE▏")
 }
 
-@Test func textFieldShowsUnderscoreCursorAfterTheLastCharacter() {
+@Test func textFieldShowsInsertionCursorAfterTheLastCharacter() {
     let value = State(wrappedValue: "Alice")
     let app = TerminalApp(width: 8, height: 1) {
         TextField("姓名", text: value.projectedValue)
@@ -1569,10 +1929,10 @@ private func renderIncrementalBenchmarkCanvas(
 
     let canvas = app.render()
 
-    #expect(String(canvas.grid[0].map(\.char)) == "Alice_  ")
+    #expect(String(canvas.grid[0].map(\.char)) == "Alice▏  ")
 }
 
-@Test func textFieldUsesAColoredUnderscoreToShowFocus() {
+@Test func textFieldUsesAColoredInsertionCursorToShowFocus() {
     let first = State(wrappedValue: "A")
     let second = State(wrappedValue: "B")
     let app = TerminalApp(width: 4, height: 2) {
@@ -1583,7 +1943,7 @@ private func renderIncrementalBenchmarkCanvas(
     }
 
     let initial = app.render()
-    #expect(initial.grid[0][1].char == "_")
+    #expect(initial.grid[0][1].char == "▏")
     #expect(initial.grid[0][1].style.foregroundColor == .brightCyan)
     #expect(initial.grid[0][3].style.backgroundColor == .black)
     #expect(initial.grid[1][1].char == " ")
@@ -1591,7 +1951,7 @@ private func renderIncrementalBenchmarkCanvas(
     _ = app.send(KeyPress(key: .tab, characters: "\t"))
     let moved = app.render()
     #expect(moved.grid[0][1].char == " ")
-    #expect(moved.grid[1][1].char == "_")
+    #expect(moved.grid[1][1].char == "▏")
     #expect(moved.grid[1][1].style.foregroundColor == .brightCyan)
 }
 
