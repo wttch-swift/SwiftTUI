@@ -6,7 +6,7 @@
 extension Text: _LayoutNodeProducing {
 
     /// 将声明式文本转换为能根据 proposal 重新排版的文本节点。
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _TextLayoutNode(text: text)
     }
 }

@@ -5,7 +5,7 @@
 extension ForEach: _MultiViewProducing, _LayoutNodeProducing {
     /// 容器调用此方法时，`ForEach` 不形成额外布局层，
     /// 而是把每个元素生成的节点展开成 VStack/HStack 的直接子节点。
-    package func _makeLayoutNodes() -> [any _LayoutNode] {
+    package func _makeLayoutNodes() -> [any _Layoutable] {
         data.flatMap { element in
             // 读取身份以保证该键路径与当前元素一起参与生成过程。
             // 当引入节点 diff 时，这里会将该值写入动态节点身份。
@@ -16,7 +16,7 @@ extension ForEach: _MultiViewProducing, _LayoutNodeProducing {
 
     /// 当 `ForEach` 被修饰器等场景当作单个 View 请求节点时，
     /// 使用顶部左对齐的 ZStack 作为退化包装。普通 Stack 会走上面的多节点路径。
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _ZStackLayoutNode(children: _makeLayoutNodes(), alignment: .topLeading)
     }
 }

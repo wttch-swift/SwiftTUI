@@ -11,6 +11,8 @@ extension Never : View {
     }
 }
 
+
+/// 告知编译器 Never 类型的视图永远不会被实例化，因此它的 body 永远不会被调用。
 package protocol _NeverView: View where Body == Never {}
 
 extension _NeverView {

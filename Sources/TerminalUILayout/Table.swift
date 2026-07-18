@@ -11,7 +11,7 @@
 /// }
 /// ```
 extension Table: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _TableLayoutNode(rows: rows, columns: columns, style: style)
     }
 }
@@ -21,8 +21,9 @@ extension Table: _LayoutNodeProducing {
 private final class _TableLayoutNode<RowValue>: _ContainerLayoutNode, _RenderableLayoutNode {
     private let columns: [TableColumn<RowValue>]
     /// 二维数组的第 0 行始终是表头，后续行与输入数据一一对应。
-    private let cellRows: [[any _LayoutNode]]
+    private let cellRows: [[any _Layoutable]]
     private let style: BorderStyle
+    private(set) var frame: Rect = .zero
     /// “距离”是相邻共享边框坐标之差，不是整个 cell rect 的宽/高。
     /// 因此表格总宽为 `1 + sum(columnDistances)`，cell 的绘制宽度为 `distance + 1`。
     private var columnDistances: [Int] = []

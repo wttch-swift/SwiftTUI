@@ -2,7 +2,7 @@
 ///
 /// 可用于显式制造 Stack 间距，或为叠放内容预留绘制区域。
 extension Spacer: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode { _SpacerLayoutNode(width: width, height: height) }
+    package func _makeLayoutNode() -> any _Layoutable { _SpacerLayoutNode(width: width, height: height) }
 }
 
 final class _SpacerLayoutNode: _RenderReusableLayoutNode, _FlexibleLayoutNode {

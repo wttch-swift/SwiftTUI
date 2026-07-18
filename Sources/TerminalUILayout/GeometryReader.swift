@@ -1,5 +1,5 @@
 extension GeometryReader: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _GeometryReaderLayoutNode(content: {
             _ZStackLayoutNode(content: content($0), alignment: .topLeading)
         })
@@ -7,11 +7,11 @@ extension GeometryReader: _LayoutNodeProducing {
 }
 
 private final class _GeometryReaderLayoutNode: _ContainerLayoutNode {
-    private let content: (GeometryProxy) -> any _LayoutNode
-    private var resolvedChild: (any _LayoutNode)?
+    private let content: (GeometryProxy) -> any _Layoutable
+    private var resolvedChild: (any _Layoutable)?
     private var resolvedFrame: Rect?
 
-    init(content: @escaping (GeometryProxy) -> any _LayoutNode) {
+    init(content: @escaping (GeometryProxy) -> any _Layoutable) {
         self.content = content
         super.init(children: [])
     }
@@ -21,8 +21,7 @@ private final class _GeometryReaderLayoutNode: _ContainerLayoutNode {
     }
 
     package override func layout(in rect: Rect) {
-        frame = rect
-        let child: any _LayoutNode
+        let child: any _Layoutable
         if let existing = resolvedChild, resolvedFrame == rect {
             child = existing
         } else {

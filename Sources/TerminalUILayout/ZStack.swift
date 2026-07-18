@@ -4,7 +4,7 @@
 /// 容器尺寸取所有子节点宽度和高度的最大值。
 extension ZStack: _LayoutNodeProducing {
     /// 构造负责重叠布局的节点。
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _ZStackLayoutNode(content: content, alignment: alignment)
     }
 }
@@ -14,10 +14,10 @@ final class _ZStackLayoutNode: _ContainerLayoutNode {
 
     init<Content: View>(content: Content, alignment: AlignmentEdge) {
         self.alignment = alignment
-        super.init(content: content)
+        super.init(children: content._makeLayoutNodes())
     }
 
-    init(children: [any _LayoutNode], alignment: AlignmentEdge) {
+    init(children: [any _Layoutable], alignment: AlignmentEdge) {
         self.alignment = alignment
         super.init(children: children)
     }
@@ -43,7 +43,6 @@ final class _ZStackLayoutNode: _ContainerLayoutNode {
     }
 
     package override func layout(in rect: Rect) {
-        super.layout(in: rect)
         let sizes = children.map { child in
             let flexible = child as? _FlexibleLayoutNode
             let measured = child.measure(proposed: ProposedSize(

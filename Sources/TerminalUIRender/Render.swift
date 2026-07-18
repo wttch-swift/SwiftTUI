@@ -8,7 +8,7 @@ package enum Render {
     ///   - root: 已由 View 展开得到的布局树根节点。
     ///   - bounds: 根节点可使用的最终画布区域。
     ///   - canvas: 接收字符单元格的目标画布。
-    package static func render(_ root: any _LayoutNode, in bounds: Rect, to canvas: Canvas) {
+    package static func render(_ root: any _Layoutable, in bounds: Rect, to canvas: Canvas) {
         render(root, in: bounds, to: canvas, cache: nil)
     }
 
@@ -17,7 +17,7 @@ package enum Render {
     /// 这里仍然每帧执行 layout。当前优化只减少 draw 阶段的大面积重复写 cell；
     /// layout 是否可以进一步跳过，需要更强的布局依赖追踪，暂时不混进第一版。
     package static func render(
-        _ root: any _LayoutNode,
+        _ root: any _Layoutable,
         in bounds: Rect,
         to canvas: Canvas,
         cache: RenderCache?
@@ -28,7 +28,7 @@ package enum Render {
 
     /// 绘制一棵已经完成 layout 的节点树。主要用于测试和分阶段性能统计。
     package static func drawLaidOut(
-        _ root: any _LayoutNode,
+        _ root: any _Layoutable,
         to canvas: Canvas,
         cache: RenderCache?
     ) {
@@ -39,7 +39,7 @@ package enum Render {
 
     /// 深度优先绘制节点，并沿当前分支传递解析后的环境值。
     private static func draw(
-        _ node: any _LayoutNode,
+        _ node: any _Layoutable,
         to canvas: Canvas,
         environment: EnvironmentValues,
         path: [Int],
@@ -58,7 +58,8 @@ package enum Render {
                renderable.frame.h > 0 {
                 drawRenderable(renderable, to: canvas, environment: resolved, path: path, cache: cache)
             }
-            if let container = node as? _ContainerLayoutNode {
+            // 递归绘制子节点。ContainerLayoutable 负责暴露 children。
+            if let container = node as? any _ContainerLayoutable {
                 for (index, child) in container.children.enumerated() {
                     draw(
                         child,

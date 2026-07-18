@@ -235,7 +235,6 @@ private struct ObservatoryDemo: View {
                 overviewPage
                     .tabItem { Text("◇ 概览") }
                     .tag(ObservatoryTab.overview)
-
                 activityPage
                     .tabItem { Text("≋ 动态") }
                     .tag(ObservatoryTab.activity)

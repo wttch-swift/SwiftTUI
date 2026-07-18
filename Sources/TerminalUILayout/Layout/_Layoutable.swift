@@ -1,5 +1,8 @@
-/// 布局节点 — 纯 measure/layout 能力，不包含 children。
-package protocol _LayoutNode {
+
+/// 可布局协议。
+/// 纯 measure/layout 能力，不包含 children。
+/// 框架内协议，最终不对外暴露。
+package protocol _Layoutable {
     /// 测量布局节点的大小。
     /// - Parameter proposed: 提议的大小。
     /// - Returns: 测量后的大小。

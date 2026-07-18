@@ -4,7 +4,7 @@
 /// 决定较矮子节点在容器高度内的垂直位置。
 extension HStack: _LayoutNodeProducing {
     /// 为每个子视图创建节点，并交由水平布局节点完成测量和定位。
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _HStackLayoutNode(content: content, alignment: alignment)
     }
 }
@@ -16,7 +16,7 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
 
     init<Content: View>(content: Content, alignment: VerticalAlignment) {
         self.alignment = alignment
-        super.init(content: content)
+        super.init(children: content._makeLayoutNodes())
     }
 
     package override func measure(proposed: ProposedSize) -> Size {
@@ -33,7 +33,6 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
     }
 
     package override func layout(in rect: Rect) {
-        super.layout(in: rect)
         var sizes = minimumSizes(proposed: ProposedSize(width: rect.w, height: rect.h))
         let remainingWidth = rect.w - sizes.reduce(0) { $0 + $1.w }
         if remainingWidth >= 0 {

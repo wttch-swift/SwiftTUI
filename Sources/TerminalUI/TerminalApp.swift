@@ -9,7 +9,7 @@ public final class TerminalApp {
     private var height: Int
     private let root: any View
     private var signalHandler: ((TerminalSignal) -> Void)?
-    private var renderedRoot: (any _LayoutNode)?
+    private var renderedRoot: (any _Layoutable)?
     private var focusedNodeIndex: Int?
     /// 区分“尚未选择过焦点”和“用户按 Esc 主动清空焦点”。
     private var didInitializeFocus = false
@@ -249,8 +249,8 @@ public final class TerminalApp {
         return dispatch(event, to: node)
     }
 
-    private func dispatch(_ event: TerminalEvent, to node: any _LayoutNode) -> TerminalEventResult {
-        if let container = node as? _ContainerLayoutNode {
+    private func dispatch(_ event: TerminalEvent, to node: any _Layoutable) -> TerminalEventResult {
+        if let container = node as? any _ContainerLayoutable {
             for child in container.children.reversed() {
                 let result = dispatch(event, to: child)
                 if result.consumesEvent {
@@ -265,7 +265,7 @@ public final class TerminalApp {
         return .ignored
     }
 
-    private func synchronizeFocus(in root: any _LayoutNode) {
+    private func synchronizeFocus(in root: any _Layoutable) {
         let modalFocusScopeActive = containsActiveModalFocusScope(in: root)
         if modalFocusScopeActive != isModalFocusScopeActive {
             focusedNodeIndex = nil
@@ -308,15 +308,15 @@ public final class TerminalApp {
         }
     }
 
-    private func containsActiveModalFocusScope(in node: any _LayoutNode) -> Bool {
+    private func containsActiveModalFocusScope(in node: any _Layoutable) -> Bool {
         if (node as? any _ModalFocusScopeLayoutNode)?.isModalFocusScopeActive == true {
             return true
         }
-        guard let container = node as? _ContainerLayoutNode else { return false }
+        guard let container = node as? any _ContainerLayoutable else { return false }
         return container.children.contains(where: containsActiveModalFocusScope)
     }
 
-    private func moveFocus(in root: any _LayoutNode, backwards: Bool) -> KeyPress.Result {
+    private func moveFocus(in root: any _Layoutable, backwards: Bool) -> KeyPress.Result {
         let nodes = focusableNodes(in: root)
         guard !nodes.isEmpty else { return .ignored }
         let next: Int
@@ -339,8 +339,8 @@ public final class TerminalApp {
     }
 
     private func restoreInteractionState(
-        from previousRoot: (any _LayoutNode)?,
-        to currentRoot: any _LayoutNode
+        from previousRoot: (any _Layoutable)?,
+        to currentRoot: any _Layoutable
     ) {
         guard let previousRoot else { return }
         let previous = focusTargetNodes(in: previousRoot)
@@ -353,8 +353,8 @@ public final class TerminalApp {
     }
 
     private func restoreTabSelection(
-        from previousRoot: (any _LayoutNode)?,
-        to currentRoot: any _LayoutNode
+        from previousRoot: (any _Layoutable)?,
+        to currentRoot: any _Layoutable
     ) {
         guard let previousRoot else { return }
         for (old, new) in zip(tabSelectionNodes(in: previousRoot), tabSelectionNodes(in: currentRoot)) {
@@ -362,10 +362,10 @@ public final class TerminalApp {
         }
     }
 
-    private func tabSelectionNodes(in node: any _LayoutNode) -> [any _TabSelectionNode] {
+    private func tabSelectionNodes(in node: any _Layoutable) -> [any _TabSelectionNode] {
         var result: [any _TabSelectionNode] = []
         if let tab = node as? any _TabSelectionNode { result.append(tab) }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             for child in container.children {
                 result.append(contentsOf: tabSelectionNodes(in: child))
             }
@@ -373,10 +373,10 @@ public final class TerminalApp {
         return result
     }
 
-    private func tabNavigationNodes(in node: any _LayoutNode) -> [any _TabNavigationNode] {
+    private func tabNavigationNodes(in node: any _Layoutable) -> [any _TabNavigationNode] {
         var result: [any _TabNavigationNode] = []
         if let tab = node as? any _TabNavigationNode { result.append(tab) }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
                 ?? container.children
             for child in children {
@@ -386,7 +386,7 @@ public final class TerminalApp {
         return result
     }
 
-    private func focusableNodes(in node: any _LayoutNode) -> [any _FocusableLayoutNode] {
+    private func focusableNodes(in node: any _Layoutable) -> [any _FocusableLayoutNode] {
         // 使用与布局树声明顺序一致的前序遍历，确保 Tab 顺序稳定且可预测。
         // FocusState 包装节点是焦点边界，其内部 TextField 不重复加入列表。
         if let binding = node as? any _FocusBindingLayoutNode {
@@ -396,7 +396,7 @@ public final class TerminalApp {
         if let focusable = node as? any _FocusableLayoutNode {
             result.append(focusable)
         }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
                 ?? container.children
             for child in children {
@@ -406,7 +406,7 @@ public final class TerminalApp {
         return result
     }
 
-    private func focusTargetNodes(in node: any _LayoutNode) -> [any _FocusTargetLayoutNode] {
+    private func focusTargetNodes(in node: any _Layoutable) -> [any _FocusTargetLayoutNode] {
         // FocusState 包装节点是交互状态边界；恢复它即可由包装节点转发给内部目标，
         // 不再继续递归，避免同一个 TextField 被恢复两次。
         if let binding = node as? any _FocusBindingLayoutNode {
@@ -416,7 +416,7 @@ public final class TerminalApp {
         if let focusTarget = node as? any _FocusTargetLayoutNode {
             result.append(focusTarget)
         }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
                 ?? container.children
             for child in children {

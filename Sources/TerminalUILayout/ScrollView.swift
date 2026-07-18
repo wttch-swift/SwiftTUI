@@ -1,6 +1,6 @@
 /// 滚动视图使用的坐标轴。
 extension ScrollView: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         let scrollNode = _ScrollViewLayoutNode(
             child: content._makeLayoutNode(),
             axes: axes,
@@ -74,14 +74,15 @@ extension _ScrollViewState {
 /// 之上的滚动指示器。整棵子树通过 `_ClippingLayoutNode` 被裁剪到 `frame`。
 private final class _ScrollViewLayoutNode: _ContainerLayoutNode, _ClippingLayoutNode,
     _FocusTargetLayoutNode {
-    let child: any _LayoutNode
+    let child: any _Layoutable
     let axes: Axis.Set
     let state: _ScrollViewState
+    private(set) var frame: Rect = .zero
     var clipRect: Rect { frame }
     var isFocused: Bool { state.isFocused }
 
     init(
-        child: any _LayoutNode,
+        child: any _Layoutable,
         axes: Axis.Set,
         showsIndicators: Bool,
         state: _ScrollViewState

@@ -1,5 +1,5 @@
 extension Toggle: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _ToggleNode(title: title, isOn: isOn)
     }
 }
@@ -7,6 +7,7 @@ extension Toggle: _LayoutNodeProducing {
 private final class _ToggleNode: _ContainerLayoutNode, _RenderReusableLayoutNode {
     let title: String
     let isOn: Binding<Bool>
+    private(set) var frame: Rect = .zero
 
     init(title: String, isOn: Binding<Bool>) {
         self.title = title
@@ -16,6 +17,10 @@ private final class _ToggleNode: _ContainerLayoutNode, _RenderReusableLayoutNode
 
     package override func measure(proposed: ProposedSize) -> Size {
         Size(w: min(proposed.width ?? Int.max, title.displayWidth + 4), h: 1)
+    }
+
+    package override func layout(in rect: Rect) {
+        frame = rect
     }
 
     func draw(to canvas: Canvas, environment: EnvironmentValues) {

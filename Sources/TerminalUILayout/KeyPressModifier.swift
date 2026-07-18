@@ -1,5 +1,5 @@
 extension _KeyPressContent: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _KeyPressNode(
             child: content._makeLayoutNode(),
             keys: keys,
@@ -12,26 +12,18 @@ package protocol _KeyPressHandlingNode {
     func handle(_ event: KeyPress) -> KeyPress.Result
 }
 
-final class _KeyPressNode: _UnaryLayoutNode, _KeyPressHandlingNode {
+final class _KeyPressNode: _LayoutContainerStorage, _PassthroughUnaryLayoutable, _KeyPressHandlingNode {
     let keys: Set<KeyPress.Key>?
     let action: (KeyPress) -> KeyPress.Result
 
     init(
-        child: any _LayoutNode,
+        child: any _Layoutable,
         keys: Set<KeyPress.Key>?,
         action: @escaping (KeyPress) -> KeyPress.Result
     ) {
         self.keys = keys
         self.action = action
-        super.init(child: child)
-    }
-
-    package override func measure(proposed: ProposedSize) -> Size {
-        child.measure(proposed: proposed)
-    }
-
-    package override func layout(in rect: Rect) {
-        child.layout(in: rect)
+        super.init(children: [child])
     }
 
     package func handle(_ event: KeyPress) -> KeyPress.Result {
