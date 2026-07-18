@@ -1,6 +1,6 @@
 # TerminalUILayout
 
-`TerminalUILayout` 连接声明式 View 和终端布局树。它依赖 Common、Core 和 View，
+`TerminalUILayout` 连接声明式 View 和终端布局树。它依赖 Foundation、Core 和 View，
 但不负责最终的树遍历输出。
 
 本模块属于 package 内部实现：`_LayoutNode`、节点基类和适配协议都不是客户端 API。
@@ -65,4 +65,3 @@ func layout(in rect: Rect)
 布局节点可以依赖 Core 的 Canvas 类型来声明 draw 签名，但实际遍历顺序、环境派生
 和裁剪作用域由 `TerminalUIRender` 管理。不要在 measure/layout 中直接 flush 输出，
 也不要从 Layout 反向启动终端事件循环。
-

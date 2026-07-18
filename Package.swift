@@ -13,28 +13,28 @@ let package = Package(
     targets: [
         // 公共值类型，不依赖渲染器或声明式 View。
         .target(
-            name: "TerminalUICommon",
+            name: "TerminalUIFoundation",
             exclude: ["README.md"]
         ),
 
         // 包内渲染实现。未声明为 product，外部客户端不能直接依赖。
         .target(
             name: "TerminalUICore",
-            dependencies: ["TerminalUICommon"],
+            dependencies: ["TerminalUIFoundation"],
             exclude: ["README.md"]
         ),
 
         // SwiftUI 风格的声明层，不包含 LayoutNode 或 Canvas。
         .target(
             name: "TerminalUIView",
-            dependencies: ["TerminalUICommon"],
+            dependencies: ["TerminalUIFoundation"],
             exclude: ["README.md"]
         ),
 
         // 声明式 View 到布局节点的包内适配与布局算法。
         .target(
             name: "TerminalUILayout",
-            dependencies: ["TerminalUICommon", "TerminalUICore", "TerminalUIView"],
+            dependencies: ["TerminalUIFoundation", "TerminalUICore", "TerminalUIView"],
             exclude: ["README.md"]
         ),
 
@@ -42,7 +42,7 @@ let package = Package(
         .target(
             name: "TerminalUIRender",
             dependencies: [
-                "TerminalUICommon",
+                "TerminalUIFoundation",
                 "TerminalUICore",
                 "TerminalUIView",
                 "TerminalUILayout",
@@ -56,7 +56,7 @@ let package = Package(
         .target(
             name: "TerminalUI",
             dependencies: [
-                "TerminalUICommon",
+                "TerminalUIFoundation",
                 "TerminalUICore",
                 "TerminalUIView",
                 "TerminalUILayout",

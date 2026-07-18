@@ -1,5 +1,5 @@
 
-import TerminalUICommon
+import TerminalUIFoundation
 
 /// 终端格子，表示终端屏幕上的一个字符单元格，包括字符、前景色、背景色以及文本样式等属性。
 package struct _Cell: Equatable {

@@ -19,7 +19,7 @@ TerminalUI 是一个使用 Swift 编写的声明式终端 UI 实验框架。它�
 
 ```mermaid
 flowchart TD
-    Common[TerminalUICommon\n值类型与字符宽度]
+    Foundation[TerminalUIFoundation\n值类型与字符宽度]
     Core[TerminalUICore\nCanvas 与 Cell]
     View[TerminalUIView\n声明式 View API]
     Layout[TerminalUILayout\nView 适配与布局树]
@@ -27,22 +27,55 @@ flowchart TD
     Facade[TerminalUI\n公共门面与 TerminalApp]
     Demo[ShengjiCmd\n示例程序]
 
-    Common --> Core
-    Common --> View
-    Common --> Layout
+    Foundation --> Core
+    Foundation --> View
+    Foundation --> Layout
     Core --> Layout
     View --> Layout
-    Common --> Render
+    Foundation --> Render
     Core --> Render
     View --> Render
     Layout --> Render
-    Common --> Facade
+    Foundation --> Facade
     Core --> Facade
     View --> Facade
     Layout --> Facade
     Render --> Facade
     Facade --> Demo
 ```
+
+图中 `A --> B` 表示 **B 直接依赖 A**，也就是依赖从底层流向上层，源码导入方向
+与箭头相反。`TerminalUIFoundation` 是唯一没有内部依赖的基础 target；客户端入口
+位于最上层的 `TerminalUI`。
+
+## Package 依赖关系
+
+下表与 `Package.swift` 中的 target 声明保持一致，只列出直接依赖：
+
+| Target | 直接依赖 | 类型与可见性 |
+| --- | --- | --- |
+| `TerminalUIFoundation` | 无 | 基础 target，不单独发布 product |
+| `TerminalUICore` | `TerminalUIFoundation` | package 内部渲染基础设施 |
+| `TerminalUIView` | `TerminalUIFoundation` | 公共声明 API，由 `TerminalUI` 重新导出 |
+| `TerminalUILayout` | `TerminalUIFoundation`、`TerminalUICore`、`TerminalUIView` | package 内部布局实现 |
+| `TerminalUIRender` | `TerminalUIFoundation`、`TerminalUICore`、`TerminalUIView`、`TerminalUILayout` | package 内部渲染协调器 |
+| `TerminalUI` | Foundation、Core、View、Layout、Render 五个 target | 唯一 library product |
+| `ShengjiCmd` | `TerminalUI` | 示例 executable target |
+| `ShengjiCmdTests` | `TerminalUI`、Core、View、Layout、Render | package 内部测试 target |
+
+这里刻意让 `TerminalUIView` 和 `TerminalUICore` 保持平级：View 声明不会接触 Canvas，
+Core 也不会导入 View。二者第一次汇合于 `TerminalUILayout`，随后由
+`TerminalUIRender` 负责把布局树绘制到 Canvas。`TerminalUI` 同时依赖这些 target，
+是因为它需要用 `TerminalApp` 串联完整运行时，但只把声明式 API 和宿主入口暴露给
+客户端。
+
+维护依赖时应遵循以下约束：
+
+- Foundation 不得依赖其他 TerminalUI target。
+- Core 与 View 不得互相依赖。
+- Layout 可以依赖 Foundation、Core 和 View，但不得依赖 Render 或 TerminalUI。
+- Render 可以依赖下层实现，但不得反向依赖 TerminalUI 宿主。
+- 应用和外部 package 只依赖 `TerminalUI` product。
 
 一帧界面的主要数据流为：
 
@@ -64,7 +97,7 @@ View 声明
 
 | 模块 | 职责 | 客户端是否应直接使用 |
 | --- | --- | --- |
-| [TerminalUICommon](Sources/TerminalUICommon/README.md) | 几何、颜色、边框、Unicode 单元格宽度 | 通常通过 `TerminalUI` 间接使用 |
+| [TerminalUIFoundation](Sources/TerminalUIFoundation/README.md) | 几何、颜色、边框、Unicode 单元格宽度 | 通常通过 `TerminalUI` 间接使用 |
 | [TerminalUICore](Sources/TerminalUICore/README.md) | Canvas、Cell、ANSI 输出与裁剪 | 否，package 内部实现 |
 | [TerminalUIView](Sources/TerminalUIView/README.md) | SwiftUI 风格的 View 声明和状态 API | 由 `TerminalUI` 重新导出 |
 | [TerminalUILayout](Sources/TerminalUILayout/README.md) | View 到 LayoutNode 的适配和布局算法 | 否，package 内部实现 |
@@ -171,4 +204,3 @@ swift run ShengjiCmd
 若节点只负责测量和摆放，实现 `_LayoutNode` 即可；只有需要直接写入字符画布的
 节点才遵循 `_RenderableLayoutNode`。渲染遍历依赖能力协议识别环境、裁剪等行为，
 不应反向依赖某个具体 View 类型。
-

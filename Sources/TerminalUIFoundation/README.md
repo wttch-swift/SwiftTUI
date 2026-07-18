@@ -1,6 +1,6 @@
-# TerminalUICommon
+# TerminalUIFoundation
 
-`TerminalUICommon` 保存多个框架层都会使用、但不依赖 View 或渲染器的基础值类型。
+`TerminalUIFoundation` 保存多个框架层都会使用、但不依赖 View 或渲染器的基础值类型。
 它位于依赖图最底层，可同时被 Core、View、Layout、Render 和最终门面引用。
 
 ## 职责
@@ -47,5 +47,4 @@ Text("状态正常")
 - 保持无状态、可复用，不导入上层 target。
 - 新类型应优先采用值语义，并在合理时遵循 `Sendable`、`Equatable`。
 - 所有宽度单位都表示终端 cell，不表示 Unicode scalar、字节或像素。
-- 修改字符分段和颜色编码时应同时补充 Common 与 Canvas 层测试。
-
+- 修改字符分段和颜色编码时应同时补充 Foundation 与 Canvas 层测试。

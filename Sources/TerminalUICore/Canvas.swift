@@ -1,4 +1,4 @@
-import TerminalUICommon
+import TerminalUIFoundation
 
 /// 固定尺寸的离屏终端画布。
 ///

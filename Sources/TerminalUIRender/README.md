@@ -43,7 +43,7 @@ Canvas 求交处理。
 ## Canvas 桥接
 
 `Canvas+View.swift` 提供使用 View 环境值绘制文本或样式的 package 扩展。底层 Core
-仍不需要导入 `TerminalUIView`，从而保持 `Common -> Core` 的低层依赖关系。
+仍不需要导入 `TerminalUIView`，从而保持 `Foundation -> Core` 的低层依赖关系。
 
 ## 扩展原则
 
@@ -51,4 +51,3 @@ Canvas 求交处理。
 - 只有跨整棵树生效的遍历语义才应加入此模块。
 - 跨层语义使用 Layout 中定义的窄能力协议，避免判断具体节点类型。
 - 修改遍历顺序、环境或裁剪时，应运行背景、ScrollView、ZStack、sheet 和零尺寸测试。
-
