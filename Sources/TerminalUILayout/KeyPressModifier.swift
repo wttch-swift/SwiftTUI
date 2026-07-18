@@ -39,3 +39,13 @@ final class _KeyPressNode: _UnaryLayoutNode, _KeyPressHandlingNode {
         return action(event)
     }
 }
+
+extension _KeyPressNode: _TerminalEventHandlingNode {
+    package func handle(_ event: TerminalEvent) -> TerminalEventResult {
+        guard case .key(let keyPress) = event else { return .ignored }
+        return switch handle(keyPress) {
+        case .handled: TerminalEventResult.handled
+        case .ignored: TerminalEventResult.ignored
+        }
+    }
+}

@@ -1,4 +1,5 @@
 import Foundation
+import TerminalUIFoundation
 import TerminalUILayout
 import TerminalUIRender
 
@@ -54,12 +55,19 @@ public final class TerminalApp {
     /// 该入口供包内终端循环与交互测试调用。
     @discardableResult
     package func send(_ event: KeyPress) -> KeyPress.Result {
+        switch dispatchKeyEvent(event) {
+        case .handled, .requestRender: return .handled
+        case .ignored: return .ignored
+        }
+    }
+
+    private func dispatchKeyEvent(_ event: KeyPress) -> TerminalEventResult {
         let node = renderedRoot ?? root._makeLayoutNode()
         synchronizeFocus(in: node)
 
         if event.key == .tab {
             // Tab 属于宿主级焦点导航，不交给当前输入框写入或外层快捷键处理。
-            return moveFocus(in: node, backwards: event.modifiers.contains(.shift))
+            return moveFocus(in: node, backwards: event.modifiers.contains(.shift)).terminalEventResult
         }
 
         // TabView 的左右切换属于容器级导航，优先于 TextField 的光标移动。
@@ -67,7 +75,7 @@ public final class TerminalApp {
         // 打开时不会意外切换页面。
         if event.key == .leftArrow || event.key == .rightArrow,
            let tab = tabNavigationNodes(in: node).last {
-            return tab.handleTabNavigation(event)
+            return tab.handleTabNavigation(event).terminalEventResult
         }
 
         let focusable = focusableNodes(in: node)
@@ -86,7 +94,7 @@ public final class TerminalApp {
            case .handled = focusable[index].handleFocusedKey(event) {
             return .handled
         }
-        return dispatch(event, to: node)
+        return dispatch(.key(event), to: node)
     }
 
     /// 进入终端事件循环，监听按键并在状态变化后重绘。
@@ -102,7 +110,7 @@ public final class TerminalApp {
         let events = _TerminalAppEventQueue()
         let signals = _TerminalSignalCoordinator()
         TerminalStateRuntime.setEventHandler { events.push(.state($0)) }
-        signals.start { events.push(.signal($0)) }
+        signals.start { events.push(.terminal(.signal($0))) }
 
         defer {
             TerminalStateRuntime.setEventHandler(nil)
@@ -146,9 +154,7 @@ public final class TerminalApp {
             // 较短轮询周期使后台动画请求能及时进入主循环，同时 poll 在无输入时
             // 仍会休眠，不会产生忙等待。
             if let key = try input.readKey(timeoutMilliseconds: 16) {
-                if case .handled = send(key) {
-                    needsRender = true
-                }
+                events.push(.terminal(.key(key)))
             }
 
             while let event = events.pop() {
@@ -163,62 +169,92 @@ public final class TerminalApp {
                     case .stopRequested:
                         isRunning = false
                     }
-                case .signal(let signal):
-                    signalHandler?(signal)
-                    switch signal {
-                    case .interrupt, .terminate, .hangup, .quit:
-                        // Leave the loop normally so defer always restores termios
-                        // and screen modes before control returns to the caller.
-                        isRunning = false
-                    case .suspend:
-                        // Shell must regain a cooked, visible terminal while this
-                        // process is stopped. raise(SIGTSTP) returns after `fg`.
-                        input.stop()
-                        leaveTerminalScreen(clearScreen: clearScreen)
-                        signals.suspendCurrentProcess()
-                        try input.start()
-                        enterTerminalScreen(clearScreen: clearScreen)
-                        updateTerminalSize()
-                        // 终端恢复后尺寸和内容都可能和暂停前不同，直接丢弃双缓冲
-                        // 与渲染缓存，让下一帧走完整重建。
-                        canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
-                        renderCache.reset()
-                        needsRender = true
-                    case .resume:
-                        // A SIGCONT may also arrive independently of our suspend
-                        // path. A full redraw is harmless and repairs stale output.
-                        updateTerminalSize()
-                        // 恢复信号可能不是从本进程 suspend 流程回来，保守地清掉
-                        // 上一帧画布和节点快照。
-                        canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
-                        renderCache.reset()
-                        needsRender = true
-                    case .windowSizeChanged:
-                        updateTerminalSize()
-                        if clearScreen {
-                            writeTerminal("\u{001B}[2J\u{001B}[H")
+                case .terminal(let terminalEvent):
+                    switch terminalEvent {
+                    case .key(let key):
+                        if dispatchKeyEvent(key).requestsRender {
+                            needsRender = true
                         }
-                        // 尺寸变化会让 frame、行数和列数全部失效；旧 Canvas diff
-                        // 和旧节点 snapshot 都不能继续复用。
-                        canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
-                        renderCache.reset()
-                        needsRender = true
+                    case .signal(let signal):
+                        if dispatch(terminalEvent).requestsRender {
+                            needsRender = true
+                        }
+                        signalHandler?(signal)
+                        switch signal {
+                        case .interrupt, .terminate, .hangup, .quit:
+                            // Leave the loop normally so defer always restores termios
+                            // and screen modes before control returns to the caller.
+                            isRunning = false
+                        case .suspend:
+                            // Shell must regain a cooked, visible terminal while this
+                            // process is stopped. raise(SIGTSTP) returns after `fg`.
+                            input.stop()
+                            leaveTerminalScreen(clearScreen: clearScreen)
+                            signals.suspendCurrentProcess()
+                            try input.start()
+                            enterTerminalScreen(clearScreen: clearScreen)
+                            if let size = updateTerminalSize(),
+                               dispatch(.resize(size)).requestsRender {
+                                needsRender = true
+                            }
+                            // 终端恢复后尺寸和内容都可能和暂停前不同，直接丢弃双缓冲
+                            // 与渲染缓存，让下一帧走完整重建。
+                            canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+                            renderCache.reset()
+                            needsRender = true
+                        case .resume:
+                            // A SIGCONT may also arrive independently of our suspend
+                            // path. A full redraw is harmless and repairs stale output.
+                            if let size = updateTerminalSize(),
+                               dispatch(.resize(size)).requestsRender {
+                                needsRender = true
+                            }
+                            // 恢复信号可能不是从本进程 suspend 流程回来，保守地清掉
+                            // 上一帧画布和节点快照。
+                            canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+                            renderCache.reset()
+                            needsRender = true
+                        case .windowSizeChanged:
+                            if let size = updateTerminalSize(),
+                               dispatch(.resize(size)).requestsRender {
+                                needsRender = true
+                            }
+                            if clearScreen {
+                                writeTerminal("\u{001B}[2J\u{001B}[H")
+                            }
+                            // 尺寸变化会让 frame、行数和列数全部失效；旧 Canvas diff
+                            // 和旧节点 snapshot 都不能继续复用。
+                            canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+                            renderCache.reset()
+                            needsRender = true
+                        }
+                    case .resize, .message:
+                        if dispatch(terminalEvent).requestsRender {
+                            needsRender = true
+                        }
                     }
                 }
             }
         }
     }
 
-    private func dispatch(_ event: KeyPress, to node: any _LayoutNode) -> KeyPress.Result {
+    private func dispatch(_ event: TerminalEvent) -> TerminalEventResult {
+        let node = renderedRoot ?? root._makeLayoutNode()
+        synchronizeFocus(in: node)
+        return dispatch(event, to: node)
+    }
+
+    private func dispatch(_ event: TerminalEvent, to node: any _LayoutNode) -> TerminalEventResult {
         if let container = node as? _ContainerLayoutNode {
             for child in container.children.reversed() {
-                if case .handled = dispatch(event, to: child) {
-                    return .handled
+                let result = dispatch(event, to: child)
+                if result.consumesEvent {
+                    return result
                 }
             }
         }
 
-        if let handler = node as? any _KeyPressHandlingNode {
+        if let handler = node as? any _TerminalEventHandlingNode {
             return handler.handle(event)
         }
         return .ignored
@@ -365,16 +401,17 @@ public final class TerminalApp {
         writeTerminal("\u{001B}[?7h\u{001B}[?25h")
     }
 
-    private func updateTerminalSize() {
-        guard let size = TerminalSizeReader.current() else { return }
+    private func updateTerminalSize() -> TerminalSize? {
+        guard let size = TerminalSizeReader.current() else { return nil }
         width = size.width
         height = size.height
+        return size
     }
 }
 
 private enum _TerminalAppRuntimeEvent {
     case state(TerminalAppEvent)
-    case signal(TerminalSignal)
+    case terminal(TerminalEvent)
 }
 
 private final class _TerminalAppEventQueue: @unchecked Sendable {
@@ -392,5 +429,23 @@ private final class _TerminalAppEventQueue: @unchecked Sendable {
         defer { lock.unlock() }
         guard !events.isEmpty else { return nil }
         return events.removeFirst()
+    }
+}
+
+private extension KeyPress.Result {
+    var terminalEventResult: TerminalEventResult {
+        switch self {
+        case .handled: .handled
+        case .ignored: .ignored
+        }
+    }
+}
+
+private extension TerminalEventResult {
+    var requestsRender: Bool {
+        switch self {
+        case .requestRender: true
+        case .handled, .ignored: false
+        }
     }
 }

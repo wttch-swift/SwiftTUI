@@ -140,14 +140,14 @@ public struct Bind<Value> {
 ///
 /// 所有异步状态来源都应该最终转换成这里的事件：
 /// - `renderRequested` 来自 `@State`、未来的 `@StateObject`、Environment 变化等。
-/// - `action` 给 timer / Combine / 网络回调使用，把状态修改切回主循环执行。
+/// - `action` 给 timer、worker、网络回调使用，把状态修改切回主循环执行。
 public enum TerminalAppEvent {
     /// 请求重绘。多个请求会被 `needsRender` 合并，通常一批事件只画一次。
     case renderRequested
 
     /// 任意需要在 TerminalApp 主循环执行的动作。
     ///
-    /// 推荐 timer / Combine sink 使用这个事件包裹状态修改：
+    /// 推荐 timer / worker 回调使用这个事件包裹状态修改：
     /// `TerminalStateRuntime.post(.action { progress += 0.01 })`
     /// 这样状态变更和渲染都在同一条 UI 线程语义里完成。
     case action(() -> Void)

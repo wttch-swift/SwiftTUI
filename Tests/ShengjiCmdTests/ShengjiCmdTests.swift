@@ -288,6 +288,48 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(String(app.render().grid[1].map(\.char)).hasPrefix("Second"))
 }
 
+@Test func onEventHandlesKeyPressThroughUnifiedDispatcher() {
+    var received = false
+    let app = TerminalApp(width: 20, height: 2) {
+        Text("事件")
+            .onEvent { event in
+                guard case .key(let keyPress) = event,
+                      keyPress.key == .character("x") else {
+                    return .ignored
+                }
+                received = true
+                return .handled
+            }
+    }
+
+    _ = app.render()
+    #expect(app.send(KeyPress(key: .character("x"), characters: "x")) == .handled)
+    #expect(received)
+}
+
+@Test func consumedOnEventStopsPropagationToOuterViews() {
+    var innerCount = 0
+    var outerCount = 0
+    let app = TerminalApp(width: 20, height: 2) {
+        Text("事件")
+            .onEvent { event in
+                guard case .key = event else { return .ignored }
+                innerCount += 1
+                return .handled
+            }
+            .onEvent { event in
+                guard case .key = event else { return .ignored }
+                outerCount += 1
+                return .handled
+            }
+    }
+
+    _ = app.render()
+    #expect(app.send(KeyPress(key: .character("x"), characters: "x")) == .handled)
+    #expect(innerCount == 1)
+    #expect(outerCount == 0)
+}
+
 @Test func incrementalRefreshBenchmarkReportsOutputSavings() {
     var counter = 0
     let app = TerminalApp(width: 108, height: 32) {

@@ -1,3 +1,4 @@
+@_exported import TerminalUIFoundation
 @_exported import TerminalUIView
 import TerminalUICore
 import TerminalUILayout
