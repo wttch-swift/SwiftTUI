@@ -18,7 +18,7 @@ extension Table: _LayoutNodeProducing {
 
 /// Table 的二维布局节点。它一方面是容器，负责定位每个单元格子节点；
 /// 另一方面是可渲染节点，在子节点之前画所有共享边框。
-private final class _TableLayoutNode<RowValue>: _ContainerLayoutNode, _RenderableLayoutNode {
+private final class _TableLayoutNode<RowValue>: _LayoutContainerStorage, _ContainerLayoutable, _RenderableLayoutNode {
     private let columns: [TableColumn<RowValue>]
     /// 二维数组的第 0 行始终是表头，后续行与输入数据一一对应。
     private let cellRows: [[any _Layoutable]]
@@ -41,7 +41,7 @@ private final class _TableLayoutNode<RowValue>: _ContainerLayoutNode, _Renderabl
 
     /// 测量分为两阶段：先根据表头和全部单元格求列天然宽度，
     /// 再在已拟合的列宽下重新测量换行后的行高。
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         guard !columns.isEmpty else { return .zero }
 
         let naturalColumns = naturalColumnDistances()
@@ -54,7 +54,7 @@ private final class _TableLayoutNode<RowValue>: _ContainerLayoutNode, _Renderabl
 
     /// 用最终 rect 重新拟合列与行，然后把单元格内容放在共享边框之间。
     /// 水平 padding 仅在轨道足够宽时保留；窄终端中优先留出实际内容空间。
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         frame = rect
         guard !columns.isEmpty, rect.w > 1, rect.h > 1 else {
             children.forEach { $0.layout(in: .zero) }

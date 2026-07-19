@@ -1,5 +1,13 @@
 /// 叶子布局节点，表示布局树中的一个叶子节点。
-final class _LeafNode: _RenderReusableLayoutNode {
+package func _makeLeafLayoutNode(
+    size: Size? = nil,
+    fingerprint: @escaping (EnvironmentValues) -> Int,
+    draw: @escaping (Canvas, Rect, EnvironmentValues) -> Void = { _, _, _ in }
+) -> any _Layoutable {
+    _LeafNode(size: size, fingerprint: fingerprint, draw: draw)
+}
+
+private final class _LeafNode: _RenderReusableLayoutNode {
 
     /// 叶子节点的固有大小。
     /// 如果未指定固有大小，则叶子节点的大小将由父节点的提议大小决定。

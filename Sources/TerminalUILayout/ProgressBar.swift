@@ -1,6 +1,6 @@
 extension ProgressBar: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _LeafNode(
+        _makeLeafLayoutNode(
             size: Size(w: width, h: 1),
             fingerprint: { _ in
                 var hasher = Hasher()

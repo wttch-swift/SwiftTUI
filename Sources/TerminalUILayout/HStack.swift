@@ -11,7 +11,7 @@ extension HStack: _LayoutNodeProducing {
 
 // MARK: - HStack
 
-private class _HStackLayoutNode: _ContainerLayoutNode {
+private class _HStackLayoutNode: _LayoutContainerStorage, _ContainerLayoutable {
     let alignment: VerticalAlignment
 
     init<Content: View>(content: Content, alignment: VerticalAlignment) {
@@ -19,7 +19,7 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
         super.init(children: content._makeLayoutNodes())
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         let sizes = minimumSizes(proposed: proposed)
         let flexibleWidth = children.contains { ($0 as? _FlexibleLayoutNode)?.expandsHorizontally == true }
         let natural = Size(
@@ -32,7 +32,7 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
         )
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         var sizes = minimumSizes(proposed: ProposedSize(width: rect.w, height: rect.h))
         let remainingWidth = rect.w - sizes.reduce(0) { $0 + $1.w }
         if remainingWidth >= 0 {

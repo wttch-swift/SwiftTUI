@@ -1128,7 +1128,7 @@ private func renderIncrementalBenchmarkCanvas(
         Text("AB")
         Text("中")
     }
-    let node = view._makeLayoutNode() as! _ContainerLayoutNode
+    let node = view._makeLayoutNode() as! any _ContainerLayoutable
 
     #expect(node.children.count == 2)
     #expect(node.measure(proposed: ProposedSize()).w == 2)
@@ -1152,7 +1152,7 @@ private func renderIncrementalBenchmarkCanvas(
         }
     }
 
-    let node = CustomLabel()._makeLayoutNode() as! _ContainerLayoutNode
+    let node = CustomLabel()._makeLayoutNode() as! any _ContainerLayoutable
 
     #expect(node.children.count == 2)
     #expect(node.measure(proposed: ProposedSize()).w == 2)
@@ -1311,7 +1311,7 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(anySize.w == 1)
     #expect(anySize.h == 1)
 
-    let tuple = TupleView(Text("A"), Text("中"))._makeLayoutNode() as! _ContainerLayoutNode
+    let tuple = TupleView(Text("A"), Text("中"))._makeLayoutNode() as! any _ContainerLayoutable
     #expect(tuple.children.count == 2)
 }
 
@@ -1325,7 +1325,7 @@ private func renderIncrementalBenchmarkCanvas(
         ForEach(rows) { row in
             Text(row.label)
         }
-    }._makeLayoutNode() as! _ContainerLayoutNode
+    }._makeLayoutNode() as! any _ContainerLayoutable
     let canvas = Canvas(width: 2, height: 3)
 
     Render.render(node, in: Rect(x: 0, y: 0, w: 2, h: 3), to: canvas)
@@ -1341,7 +1341,7 @@ private func renderIncrementalBenchmarkCanvas(
         ForEach(["A", "B", "C"], id: \.self) { value in
             Text(value)
         }
-    }._makeLayoutNode() as! _ContainerLayoutNode
+    }._makeLayoutNode() as! any _ContainerLayoutable
 
     #expect(node.children.count == 3)
     #expect(node.measure(proposed: ProposedSize()).w == 3)
@@ -1352,7 +1352,7 @@ private func renderIncrementalBenchmarkCanvas(
         ForEach(0..<3) { value in
             Text("\(value)")
         }
-    }._makeLayoutNode() as! _ContainerLayoutNode
+    }._makeLayoutNode() as! any _ContainerLayoutable
 
     #expect(node.children.count == 3)
     #expect(node.measure(proposed: ProposedSize()).w == 3)

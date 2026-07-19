@@ -17,6 +17,6 @@ extension ForEach: _MultiViewProducing, _LayoutNodeProducing {
     /// 当 `ForEach` 被修饰器等场景当作单个 View 请求节点时，
     /// 使用顶部左对齐的 ZStack 作为退化包装。普通 Stack 会走上面的多节点路径。
     package func _makeLayoutNode() -> any _Layoutable {
-        _ZStackLayoutNode(children: _makeLayoutNodes(), alignment: .topLeading)
+        _makeZStackLayoutNode(children: _makeLayoutNodes(), alignment: .topLeading)
     }
 }

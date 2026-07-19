@@ -1,6 +1,6 @@
 extension _KeyPressContent: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _KeyPressNode(
+        _makeKeyPressLayoutNode(
             child: content._makeLayoutNode(),
             keys: keys,
             action: action
@@ -12,7 +12,15 @@ package protocol _KeyPressHandlingNode {
     func handle(_ event: KeyPress) -> KeyPress.Result
 }
 
-final class _KeyPressNode: _LayoutContainerStorage, _PassthroughUnaryLayoutable, _KeyPressHandlingNode {
+package func _makeKeyPressLayoutNode(
+    child: any _Layoutable,
+    keys: Set<KeyPress.Key>?,
+    action: @escaping (KeyPress) -> KeyPress.Result
+) -> any _Layoutable {
+    _KeyPressNode(child: child, keys: keys, action: action)
+}
+
+private final class _KeyPressNode: _LayoutContainerStorage, _PassthroughUnaryLayoutable, _KeyPressHandlingNode {
     let keys: Set<KeyPress.Key>?
     let action: (KeyPress) -> KeyPress.Result
 

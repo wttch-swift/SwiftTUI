@@ -9,7 +9,7 @@ extension ScrollView: _LayoutNodeProducing {
         )
         // 滚动键处理放在内容节点外层：内层可交互控件先处理按键，
         // 它们返回 ignored 时事件才冒泡给 ScrollView。
-        return _KeyPressNode(
+        return _makeKeyPressLayoutNode(
             child: scrollNode,
             keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .home, .end, .pageUp, .pageDown]
         ) { event in
@@ -72,7 +72,7 @@ extension _ScrollViewState {
 
 /// 滚动布局节点。`children[0]` 是可移动内容，`children[1]` 是固定在视口
 /// 之上的滚动指示器。整棵子树通过 `_ClippingLayoutNode` 被裁剪到 `frame`。
-private final class _ScrollViewLayoutNode: _ContainerLayoutNode, _ClippingLayoutNode,
+private final class _ScrollViewLayoutNode: _LayoutContainerStorage, _ContainerLayoutable, _ClippingLayoutNode,
     _FocusTargetLayoutNode {
     let child: any _Layoutable
     let axes: Axis.Set
@@ -96,7 +96,7 @@ private final class _ScrollViewLayoutNode: _ContainerLayoutNode, _ClippingLayout
 
     /// 测量内容时，可滚动轴收到 `nil` proposal，从而报告完整内容尺寸；
     /// 非滚动轴仍受视口约束。ScrollView 本身优先接受父容器建议的视口尺寸。
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         let contentSize = child.measure(
             proposed: ProposedSize(
                 width: axes.contains(.horizontal) ? nil : proposed.width,
@@ -111,7 +111,7 @@ private final class _ScrollViewLayoutNode: _ContainerLayoutNode, _ClippingLayout
 
     /// 把内容以“完整内容尺寸”布局，再用负偏移移到视口后方。
     /// 指示器始终使用未偏移的 `rect`，因此看起来固定在视口边缘。
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         frame = rect
         let measured = child.measure(
             proposed: ProposedSize(

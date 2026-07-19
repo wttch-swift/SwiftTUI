@@ -77,7 +77,7 @@ private final class _ToastSurfaceNode: _LayoutContainerStorage, _UnaryLayoutable
     private(set) var frame: Rect = .zero
 
     init(child: any _Layoutable) {
-        let styled = _EnvironmentNode(child: child) { environment in
+        let styled = _makeEnvironmentLayoutNode(child: child) { environment in
             environment.foregroundColor = .black
             environment.backgroundColor = .brightCyan
             environment._isBold = true
@@ -107,11 +107,11 @@ private final class _ToastSurfaceNode: _LayoutContainerStorage, _UnaryLayoutable
     }
 }
 
-private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLayoutNode,
+private final class _PresentationLayoutNode: _LayoutContainerStorage, _ContainerLayoutable, _FocusScopeLayoutNode,
     _ModalFocusScopeLayoutNode {
     private let base: any _Layoutable
     private let presented: (any _Layoutable)?
-    private let blocker: _KeyPressNode?
+    private let blocker: (any _Layoutable)?
     private let alignment: AlignmentEdge
     private let isModal: Bool
 
@@ -137,7 +137,7 @@ private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLa
         self.isModal = isModal
 
         if presented != nil, isModal {
-            blocker = _KeyPressNode(child: _ContainerLayoutNode(children: []), keys: nil) { event in
+            blocker = _makeKeyPressLayoutNode(child: _makeContainerLayoutNode(children: []), keys: nil) { event in
                 if event.key == .escape { dismiss() }
                 return .handled
             }
@@ -151,11 +151,11 @@ private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLa
         super.init(children: children)
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         base.measure(proposed: proposed)
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         base.layout(in: rect)
         blocker?.layout(in: rect)
 

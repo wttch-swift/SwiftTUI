@@ -1,7 +1,17 @@
 
 
 /// 在子节点四周增加固定终端 cell 留白的布局包装节点。
-final class _PaddingLayoutNode: _LayoutContainerStorage, _UnaryLayoutable {
+package func _makePaddingLayoutNode(
+    child: any _Layoutable,
+    top: Int,
+    right: Int,
+    bottom: Int,
+    left: Int
+) -> any _Layoutable {
+    _PaddingLayoutNode(child: child, top: top, right: right, bottom: bottom, left: left)
+}
+
+private final class _PaddingLayoutNode: _LayoutContainerStorage, _UnaryLayoutable {
     let top: Int
     let right: Int
     let bottom: Int

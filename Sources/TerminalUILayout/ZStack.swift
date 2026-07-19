@@ -9,7 +9,14 @@ extension ZStack: _LayoutNodeProducing {
     }
 }
 
-final class _ZStackLayoutNode: _ContainerLayoutNode {
+package func _makeZStackLayoutNode(
+    children: [any _Layoutable],
+    alignment: AlignmentEdge
+) -> any _Layoutable {
+    _ZStackLayoutNode(children: children, alignment: alignment)
+}
+
+private final class _ZStackLayoutNode: _LayoutContainerStorage, _ContainerLayoutable {
     let alignment: AlignmentEdge
 
     init<Content: View>(content: Content, alignment: AlignmentEdge) {
@@ -22,7 +29,7 @@ final class _ZStackLayoutNode: _ContainerLayoutNode {
         super.init(children: children)
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         let sizes = children.map { child in
             let flexible = child as? _FlexibleLayoutNode
             return child.measure(proposed: ProposedSize(
@@ -42,7 +49,7 @@ final class _ZStackLayoutNode: _ContainerLayoutNode {
         )
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         let sizes = children.map { child in
             let flexible = child as? _FlexibleLayoutNode
             let measured = child.measure(proposed: ProposedSize(

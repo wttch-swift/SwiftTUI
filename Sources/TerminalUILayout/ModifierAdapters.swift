@@ -2,7 +2,7 @@ import TerminalUIView
 
 extension _PaddingLayoutView: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _PaddingLayoutNode(
+        _makePaddingLayoutNode(
             child: content._makeLayoutNode(),
             top: top,
             right: right,
@@ -14,7 +14,7 @@ extension _PaddingLayoutView: _LayoutNodeProducing {
 
 extension _FrameLayoutView: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _FrameLayoutNode(
+        _makeFrameLayoutNode(
             child: content._makeLayoutNode(),
             width: width,
             height: height,

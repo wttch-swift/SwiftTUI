@@ -4,7 +4,16 @@
 ///
 /// 未指定的轴沿用子节点测量结果；真正布局时目标尺寸不会超过父节点
 /// 分配的 `rect`，防止子节点写出父布局范围。
-final class _FrameLayoutNode: _LayoutContainerStorage, _UnaryLayoutable {
+package func _makeFrameLayoutNode(
+    child: any _Layoutable,
+    width: Int?,
+    height: Int?,
+    alignment: AlignmentEdge
+) -> any _Layoutable {
+    _FrameLayoutNode(child: child, width: width, height: height, alignment: alignment)
+}
+
+private final class _FrameLayoutNode: _LayoutContainerStorage, _UnaryLayoutable {
     let width: Int?
     let height: Int?
     let alignment: AlignmentEdge

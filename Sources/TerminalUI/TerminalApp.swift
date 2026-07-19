@@ -3,7 +3,7 @@ import TerminalUIFoundation
 import TerminalUILayout
 import TerminalUIRender
 
-/// A one-way View → LayoutNode → Render → Canvas host.
+/// A one-way View → _Layoutable → Render → Canvas host.
 public final class TerminalApp {
     private var width: Int
     private var height: Int

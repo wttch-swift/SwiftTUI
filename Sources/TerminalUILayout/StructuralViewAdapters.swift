@@ -29,7 +29,7 @@ extension TupleView: _LayoutNodeProducing, _MultiViewProducing {
     }
 
     package func _makeLayoutNode() -> any _Layoutable {
-        _ZStackLayoutNode(children: _makeLayoutNodes(), alignment: .topLeading)
+        _makeZStackLayoutNode(children: _makeLayoutNodes(), alignment: .topLeading)
     }
 }
 
@@ -41,7 +41,7 @@ extension AnyView: _LayoutNodeProducing {
 
 extension EmptyView: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _ContainerLayoutNode(children: [])
+        _makeContainerLayoutNode(children: [])
     }
 }
 
@@ -53,13 +53,13 @@ extension _ViewModifier_Content: _LayoutNodeProducing {
 
 extension _EnvironmentWritingContent: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _EnvironmentNode(child: content._makeLayoutNode(), update: update)
+        _makeEnvironmentLayoutNode(child: content._makeLayoutNode(), update: update)
     }
 }
 
 extension _BackgroundColorFill: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _LeafNode(
+        _makeLeafLayoutNode(
             fingerprint: { _ in
                 var hasher = Hasher()
                 hasher.combine(color)

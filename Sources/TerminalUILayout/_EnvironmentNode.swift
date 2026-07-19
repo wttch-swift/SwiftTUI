@@ -2,7 +2,14 @@
 ///
 /// 它对测量和布局完全透明；只有 Render 遍历到该节点时才复制父环境、
 /// 执行 `update`，随后把新值传给子节点。复制语义保证兄弟分支互不污染。
-final class _EnvironmentNode: _LayoutContainerStorage, _PassthroughUnaryLayoutable, _EnvironmentLayoutNode {
+package func _makeEnvironmentLayoutNode(
+    child: any _Layoutable,
+    update: @escaping (inout EnvironmentValues) -> Void
+) -> any _Layoutable {
+    _EnvironmentNode(child: child, update: update)
+}
+
+private final class _EnvironmentNode: _LayoutContainerStorage, _PassthroughUnaryLayoutable, _EnvironmentLayoutNode {
     let update: (inout EnvironmentValues) -> Void
 
     init(child: any _Layoutable, update: @escaping (inout EnvironmentValues) -> Void) {

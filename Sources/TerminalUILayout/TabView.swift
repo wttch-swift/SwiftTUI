@@ -91,7 +91,7 @@ package protocol _TabNavigationNode: AnyObject {
     func handleTabNavigation(_ event: KeyPress) -> KeyPress.Result
 }
 
-private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNode,
+private final class _TabViewLayoutNode: _LayoutContainerStorage, _ContainerLayoutable, _FlexibleLayoutNode,
     _TabSelectionNode, _TabNavigationNode {
     private let pages: [_TabPage]
     private var tabBar: _TabBarLayoutNode
@@ -116,7 +116,7 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNod
         super.init(children: [tabBar] + selectedContent)
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         guard !pages.isEmpty else { return .zero }
         let barSize = tabBar.measure(proposed: ProposedSize(width: proposed.width, height: proposed.height))
         let remainingHeight = proposed.height.map { max(0, $0 - barSize.h) }
@@ -130,7 +130,7 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNod
         )
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         guard !pages.isEmpty else { return }
         let barHeight = min(rect.h, tabBar.measure(proposed: ProposedSize(width: rect.w, height: rect.h)).h)
         tabBar.layout(in: Rect(x: rect.x, y: rect.y, w: rect.w, h: barHeight))
@@ -170,7 +170,7 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNod
     }
 }
 
-private final class _TabBarLayoutNode: _ContainerLayoutNode, _RenderableLayoutNode {
+private final class _TabBarLayoutNode: _LayoutContainerStorage, _ContainerLayoutable, _RenderableLayoutNode {
     private let labelCount: Int
     private(set) var frame: Rect = .zero
 
@@ -195,14 +195,14 @@ private final class _TabBarLayoutNode: _ContainerLayoutNode, _RenderableLayoutNo
     /// A selected tab remains recognizable through brackets without color, and
     /// becomes a contiguous high-contrast badge in color-capable terminals.
     private static func selected(_ node: any _Layoutable) -> any _Layoutable {
-        _EnvironmentNode(child: node) { environment in
+        _makeEnvironmentLayoutNode(child: node) { environment in
             environment.foregroundColor = .black
             environment.backgroundColor = .brightCyan
             environment._isBold = true
         }
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         guard labelCount > 0 else { return .zero }
         let sizes = children.map { $0.measure(proposed: ProposedSize(width: nil, height: proposed.height)) }
         return Size(
@@ -211,7 +211,7 @@ private final class _TabBarLayoutNode: _ContainerLayoutNode, _RenderableLayoutNo
         )
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         frame = rect
         var x = rect.x
         for child in children {
