@@ -1,9 +1,3 @@
-// MARK: - _ContainerLayoutNode (base)
-
-package protocol _FlexibleLayoutNode {
-    var expandsHorizontally: Bool { get }
-    var expandsVertically: Bool { get }
-}
 
 /// 将当前节点及其子树的绘制限制在指定矩形内。
 ///

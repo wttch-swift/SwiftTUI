@@ -22,6 +22,8 @@ package extension View {
         return body._makeLayoutNode()
     }
 
+
+    /// 展开组合视图，直到得到可直接参与布局的节点列表。
     func _makeLayoutNodes() -> [any _Layoutable] {
         if let list = self as? any _MultiViewProducing {
             return list._makeLayoutNodes()

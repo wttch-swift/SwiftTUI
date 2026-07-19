@@ -9,7 +9,7 @@ extension ScrollView: _LayoutNodeProducing {
         )
         // 滚动键处理放在内容节点外层：内层可交互控件先处理按键，
         // 它们返回 ignored 时事件才冒泡给 ScrollView。
-        return _makeKeyPressLayoutNode(
+        return _KeyPressNode(
             child: scrollNode,
             keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .home, .end, .pageUp, .pageDown]
         ) { event in

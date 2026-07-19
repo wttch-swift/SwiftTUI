@@ -137,7 +137,7 @@ private final class _PresentationLayoutNode: _LayoutContainerStorage, _Container
         self.isModal = isModal
 
         if presented != nil, isModal {
-            blocker = _makeKeyPressLayoutNode(child: _makeContainerLayoutNode(children: []), keys: nil) { event in
+            blocker = _KeyPressNode(keys: nil) { event in
                 if event.key == .escape { dismiss() }
                 return .handled
             }

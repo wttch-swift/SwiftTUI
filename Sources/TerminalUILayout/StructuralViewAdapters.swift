@@ -41,8 +41,13 @@ extension AnyView: _LayoutNodeProducing {
 
 extension EmptyView: _LayoutNodeProducing {
     package func _makeLayoutNode() -> any _Layoutable {
-        _makeContainerLayoutNode(children: [])
+        _EmptyLayoutNode()
     }
+}
+
+private struct _EmptyLayoutNode: _Layoutable {
+    func measure(proposed: ProposedSize) -> Size { .zero }
+    func layout(in rect: Rect) {}
 }
 
 extension _ViewModifier_Content: _LayoutNodeProducing {

@@ -30,18 +30,10 @@ private final class _ZStackLayoutNode: _LayoutContainerStorage, _ContainerLayout
     }
 
     package func measure(proposed: ProposedSize) -> Size {
-        let sizes = children.map { child in
-            let flexible = child as? _FlexibleLayoutNode
-            return child.measure(proposed: ProposedSize(
-                width: flexible?.expandsHorizontally == true ? nil : proposed.width ?? Int.max,
-                height: flexible?.expandsVertically == true ? nil : proposed.height ?? Int.max
-            ))
-        }
-        let flexibleWidth = children.contains { ($0 as? _FlexibleLayoutNode)?.expandsHorizontally == true }
-        let flexibleHeight = children.contains { ($0 as? _FlexibleLayoutNode)?.expandsVertically == true }
+        let sizes = children.map { $0.measure(proposed: proposed) }
         let natural = Size(
-            w: flexibleWidth ? proposed.width ?? sizes.map(\.w).max() ?? 0 : sizes.map(\.w).max() ?? 0,
-            h: flexibleHeight ? proposed.height ?? sizes.map(\.h).max() ?? 0 : sizes.map(\.h).max() ?? 0
+            w: sizes.map(\.w).max() ?? 0,
+            h: sizes.map(\.h).max() ?? 0
         )
         return Size(
             w: min(natural.w, proposed.width ?? natural.w),
@@ -51,14 +43,12 @@ private final class _ZStackLayoutNode: _LayoutContainerStorage, _ContainerLayout
 
     package func layout(in rect: Rect) {
         let sizes = children.map { child in
-            let flexible = child as? _FlexibleLayoutNode
-            let measured = child.measure(proposed: ProposedSize(
-                width: flexible?.expandsHorizontally == true ? nil : rect.w,
-                height: flexible?.expandsVertically == true ? nil : rect.h
-            ))
+            let measured = child.measure(
+                proposed: ProposedSize(width: rect.w, height: rect.h)
+            )
             return Size(
-                w: flexible?.expandsHorizontally == true ? rect.w : min(measured.w, rect.w),
-                h: flexible?.expandsVertically == true ? rect.h : min(measured.h, rect.h)
+                w: min(measured.w, rect.w),
+                h: min(measured.h, rect.h)
             )
         }
         for (i, size) in sizes.enumerated() {

@@ -2251,6 +2251,34 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(root.h == 2)
 }
 
+@Test func zStackPassesTheSameProposalToFlexibleChildren() {
+    final class FlexibleProbe: _Layoutable, _FlexibleLayoutNode {
+        var proposals: [ProposedSize] = []
+        var expandsHorizontally: Bool { true }
+        var expandsVertically: Bool { true }
+
+        func measure(proposed: ProposedSize) -> Size {
+            proposals.append(proposed)
+            return Size(w: proposed.width ?? 1, h: proposed.height ?? 1)
+        }
+
+        func layout(in rect: Rect) {}
+    }
+
+    let child = FlexibleProbe()
+    let node = _makeZStackLayoutNode(children: [child], alignment: .center)
+
+    let measured = node.measure(proposed: ProposedSize(width: 7, height: 3))
+    node.layout(in: Rect(x: 0, y: 0, w: 5, h: 2))
+
+    #expect(measured == Size(w: 7, h: 3))
+    #expect(child.proposals.count == 2)
+    #expect(child.proposals[0].width == 7)
+    #expect(child.proposals[0].height == 3)
+    #expect(child.proposals[1].width == 5)
+    #expect(child.proposals[1].height == 2)
+}
+
 @Test func zeroHeightRenderableDoesNotOverwriteBorder() {
     let canvas = Canvas(width: 5, height: 3)
     let view = VStack {
