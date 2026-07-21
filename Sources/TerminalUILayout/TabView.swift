@@ -158,7 +158,9 @@ private final class _TabViewLayoutNode: _LayoutContainerStorage, _ContainerLayou
     }
 
     func restoreSelection(from index: Int) {
-        guard !usesExternalSelection, pages.indices.contains(index) else { return }
+        guard !usesExternalSelection,
+              pages.indices.contains(index),
+              index != selectedIndex else { return }
         updateSelection(to: index)
     }
 

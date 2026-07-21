@@ -12,6 +12,7 @@
 - 容器：`HStack`、`VStack`、`LazyVStack`、`ZStack`、`GroupBox`、`ScrollView`、`TabView`。
 - 基础视图：`Text`、`Spacer`、`ProgressBar`、`Toggle`、`TextField`。
 - 数据视图：`ForEach`、`Table`、`TableColumn`、`GeometryReader`。
+- 身份：`View.id(_:)`，以及 `ForEach`、`LazyVStack` 的数据 ID 会保留到布局节点。
 - 状态：`State`、`Binding`、`FocusState`。
 - 交互：`KeyPress`、`onKeyPress`、`focused`、`sheet`、`toast`。
 - Modifier：`frame`、`padding`、`background`、`bordered`、颜色、焦点效果、

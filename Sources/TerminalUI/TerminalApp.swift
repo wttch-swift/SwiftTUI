@@ -44,12 +44,13 @@ public final class _TerminalAppHost {
     private func render(to canvas: Canvas, cache: RenderCache?) {
         let bounds = Rect(x: 0, y: 0, w: width, h: height)
         let node = root._makeLayoutNode()
-        // GeometryReader 这类节点会在 layout 阶段才按最终尺寸展开子树。焦点与
-        // 滚动状态都必须在这之后迁移，否则聊天页这类 GeometryReader 内的
-        // ScrollView 会在焦点遍历时不可见，表现成 Tab 怎么也进不去。
-        restoreTabSelection(from: renderedRoot, to: node)
+        // Restore statically available state first. In particular, an
+        // uncontrolled TabView must select the old page before layout.
+        LayoutReconciler.reconcile(from: renderedRoot, to: node)
         node.layout(in: bounds)
-        restoreInteractionState(from: renderedRoot, to: node)
+        // GeometryReader creates descendants during layout. Reconcile once more
+        // to reach those nodes; ScrollView reapplies its own offset locally.
+        LayoutReconciler.reconcile(from: renderedRoot, to: node)
         synchronizeFocus(in: node)
         Render.drawLaidOut(node, to: canvas, cache: cache)
         renderedRoot = node
@@ -302,6 +303,13 @@ public final class _TerminalAppHost {
         guard !nodes.isEmpty else {
             focusedNodeIndex = nil
             return
+        }
+
+        // Reconciliation may move the previously focused node to a new structural
+        // index after a ForEach reorder. Adopt that index before applying the
+        // ordinary focus rules below.
+        if let restoredIndex = nodes.firstIndex(where: \.isFocused) {
+            focusedNodeIndex = restoredIndex
         }
 
         let boundIndices = nodes.indices.filter {

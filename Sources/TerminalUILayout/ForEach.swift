@@ -7,10 +7,10 @@ extension ForEach: _MultiViewProducing, _LayoutNodeProducing {
     /// 而是把每个元素生成的节点展开成 VStack/HStack 的直接子节点。
     package func _makeLayoutNodes() -> [any _Layoutable] {
         data.flatMap { element in
-            // 读取身份以保证该键路径与当前元素一起参与生成过程。
-            // 当引入节点 diff 时，这里会将该值写入动态节点身份。
-            _ = element[keyPath: id]
-            return content(element)._makeLayoutNodes()
+            let identity = AnyHashable(element[keyPath: id])
+            return content(element)._makeLayoutNodes().enumerated().map { index, node in
+                _makeIdentifiedLayoutNode(child: node, id: identity, childIndex: index)
+            }
         }
     }
 

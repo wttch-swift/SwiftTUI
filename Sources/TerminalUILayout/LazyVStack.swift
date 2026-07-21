@@ -85,7 +85,11 @@ private final class _LazyVStackLayoutNode<Element, ID: Hashable, Row: View>:
             var height = rowHeights[key] ?? estimatedRowHeight
             let rowEnd = y + height
             if rowEnd >= materialStart, y <= materialEnd {
-                let node = content(element)._makeLayoutNode()
+                let node = _makeIdentifiedLayoutNode(
+                    child: content(element)._makeLayoutNode(),
+                    id: AnyHashable(key),
+                    childIndex: 0
+                )
                 let measured = node.measure(
                     proposed: ProposedSize(width: viewport.w, height: nil)
                 )
