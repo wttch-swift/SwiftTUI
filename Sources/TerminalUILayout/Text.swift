@@ -1,3 +1,5 @@
+import Foundation
+
 /// 在终端画布上显示纯文本的基础视图。
 ///
 /// `Text` 本身不保存颜色等外观属性；这些属性由环境值在渲染时注入。
@@ -13,17 +15,26 @@ extension Text: _LayoutNodeProducing {
 
 private final class _TextLayoutNode: _RenderReusableLayoutNode {
     let text: String
+    /// Unicode grapheme segmentation and terminal-width calculation are much more
+    /// expensive than arranging already measured glyphs. A text node is measured
+    /// several times by nested stacks before it is drawn, so do this work once.
+    private let segments: [Segment]
+    private let naturalWidth: Int
+    private var cachedLayouts: [_TextLayout.Key: _TextLayout] = [:]
     private(set) var frame: Rect = .zero
 
     init(text: String) {
         self.text = text
+        let analysis = _TextLayoutCache.shared.analysis(for: text)
+        self.segments = analysis.segments
+        self.naturalWidth = analysis.naturalWidth
     }
 
     func measure(proposed: ProposedSize) -> Size {
         // 有宽度 proposal 时必须按该宽度实际换行后再测高；无约束时才使用最长
         // 显式行作为固有宽度，否则父容器无法获知文本压缩后的真实行数。
-        let width = proposed.width.map { max(0, $0) } ?? _TextLayout.naturalWidth(of: text)
-        let layout = _TextLayout(text: text, width: width)
+        let width = proposed.width.map { max(0, $0) } ?? naturalWidth
+        let layout = layout(width: width)
         let measuredHeight = min(layout.lines.count, proposed.height ?? layout.lines.count)
         return Size(
             w: min(layout.lines.map(\.displayWidth).max() ?? 0, width),
@@ -40,7 +51,7 @@ private final class _TextLayoutNode: _RenderReusableLayoutNode {
         let availableLines = min(frame.h, environment.lineLimit ?? frame.h)
         guard frame.w > 0, availableLines > 0 else { return }
 
-        let layout = _TextLayout(text: text, width: frame.w, maximumLines: availableLines)
+        let layout = layout(width: frame.w, maximumLines: availableLines)
         for (offset, line) in layout.lines.enumerated() {
             canvas.drawText(
                 x: frame.x,
@@ -62,23 +73,101 @@ private final class _TextLayoutNode: _RenderReusableLayoutNode {
         hasher.combine(environment.renderFingerprint)
         return hasher.finalize()
     }
+
+    private func layout(width: Int, maximumLines: Int? = nil) -> _TextLayout {
+        let key = _TextLayout.Key(width: width, maximumLines: maximumLines)
+        if let cached = cachedLayouts[key] { return cached }
+        let result = _TextLayoutCache.shared.layout(
+            text: text,
+            segments: segments,
+            width: width,
+            maximumLines: maximumLines
+        )
+        cachedLayouts[key] = result
+        return result
+    }
+}
+
+/// Layout nodes are rebuilt for each terminal frame. Keeping only a node-local
+/// cache would therefore repeat all text work on the next key press. This bounded,
+/// thread-safe cache lets stable ScrollView rows reuse their analysis and wrapping
+/// across frames without retaining an unlimited chat history.
+private final class _TextLayoutCache: @unchecked Sendable {
+    struct Analysis {
+        let segments: [Segment]
+        let naturalWidth: Int
+    }
+
+    struct LayoutKey: Hashable {
+        let text: String
+        let width: Int
+        let maximumLines: Int?
+    }
+
+    static let shared = _TextLayoutCache()
+
+    private let lock = NSLock()
+    private var analyses: [String: Analysis] = [:]
+    private var layouts: [LayoutKey: _TextLayout] = [:]
+    private let maximumEntryCount = 2_048
+
+    func analysis(for text: String) -> Analysis {
+        lock.lock()
+        if let cached = analyses[text] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let segments = Segment.segment(text)
+        let result = Analysis(segments: segments, naturalWidth: _TextLayout.naturalWidth(of: segments))
+
+        lock.lock()
+        if analyses.count >= maximumEntryCount { analyses.removeAll(keepingCapacity: true) }
+        analyses[text] = result
+        lock.unlock()
+        return result
+    }
+
+    func layout(text: String, segments: [Segment], width: Int, maximumLines: Int?) -> _TextLayout {
+        let key = LayoutKey(text: text, width: width, maximumLines: maximumLines)
+        lock.lock()
+        if let cached = layouts[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let result = _TextLayout(segments: segments, width: width, maximumLines: maximumLines)
+
+        lock.lock()
+        if layouts.count >= maximumEntryCount { layouts.removeAll(keepingCapacity: true) }
+        layouts[key] = result
+        lock.unlock()
+        return result
+    }
 }
 
 /// Text 测量和绘制共用的终端 cell 排版结果。
 private struct _TextLayout {
+    struct Key: Hashable {
+        let width: Int
+        let maximumLines: Int?
+    }
+
     static let ellipsis = "…"
 
     let lines: [String]
 
-    init(text: String, width: Int, maximumLines: Int? = nil) {
+    init(segments: [Segment], width: Int, maximumLines: Int? = nil) {
         guard width > 0 else {
             // 零宽度时无法绘制，但测量仍保留显式换行带来的行高。
-            lines = Array(repeating: "", count: Self.explicitLines(in: text).count)
+            lines = Array(repeating: "", count: Self.explicitLineCount(in: segments))
             return
         }
 
         // 先生成完整换行结果，再应用最大行数，才能判断最后一行是否需要省略号。
-        let wrapped = Self.wrap(text, width: width)
+        let wrapped = Self.wrap(segments, width: width)
         let visibleCount = min(wrapped.lines.count, max(0, maximumLines ?? wrapped.lines.count))
         guard visibleCount > 0 else {
             lines = []
@@ -92,26 +181,31 @@ private struct _TextLayout {
         lines = visible
     }
 
-    static func naturalWidth(of text: String) -> Int {
+    static func naturalWidth(of segments: [Segment]) -> Int {
         // 自然宽度只尊重显式换行，不在无约束测量阶段主动折行。
-        explicitLines(in: text).map(\.displayWidth).max() ?? 0
+        var maximum = 0
+        var current = 0
+        for segment in segments {
+            if segment.kind == .control, segment.text == "\n" || segment.text == "\r" || segment.text == "\r\n" {
+                maximum = max(maximum, current)
+                current = 0
+            } else if segment.kind == .text {
+                current += segment.cellLength
+            }
+        }
+        return max(maximum, current)
     }
 
-    private static func wrap(_ text: String, width: Int) -> (lines: [String], wasTruncated: Bool) {
+    private static func wrap(_ segments: [Segment], width: Int) -> (lines: [String], wasTruncated: Bool) {
         var lines = [""]
         var currentWidth = 0
 
-        for character in text {
-            let value = String(character)
-            if value == "\n" || value == "\r" || value == "\r\n" {
+        for segment in segments {
+            if segment.kind == .control, segment.text == "\n" || segment.text == "\r" || segment.text == "\r\n" {
                 lines.append("")
                 currentWidth = 0
                 continue
             }
-
-            // Segment 同时提供可绘制类型和终端 cell 宽度，不能用 String.count
-            // 代替，否则中文、emoji 和组合字符会得到错误的换行位置。
-            guard let segment = Segment.segment(value).first else { continue }
             guard segment.kind == .text, segment.cellLength > 0 else { continue }
 
             // 宽字符比整行还宽时无法完整绘制，以省略号结束排版。
@@ -126,7 +220,7 @@ private struct _TextLayout {
                 lines.append("")
                 currentWidth = 0
             }
-            lines[lines.count - 1] += value
+            lines[lines.count - 1] += segment.text
             currentWidth += segment.cellLength
         }
 
@@ -140,17 +234,13 @@ private struct _TextLayout {
         return line.truncated(toWidth: width - ellipsisWidth) + ellipsis
     }
 
-    private static func explicitLines(in text: String) -> [String] {
-        // 该路径用于固有尺寸测量：过滤控制片段，但保留用户输入的空行。
-        var lines = [""]
-        for character in text {
-            let value = String(character)
-            if value == "\n" || value == "\r" || value == "\r\n" {
-                lines.append("")
-            } else if Segment.segment(value).first?.kind == .text {
-                lines[lines.count - 1] += value
+    private static func explicitLineCount(in segments: [Segment]) -> Int {
+        var count = 1
+        for segment in segments where segment.kind == .control {
+            if segment.text == "\n" || segment.text == "\r" || segment.text == "\r\n" {
+                count += 1
             }
         }
-        return lines
+        return count
     }
 }

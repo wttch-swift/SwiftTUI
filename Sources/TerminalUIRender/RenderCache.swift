@@ -34,7 +34,7 @@ package final class RenderCache {
     /// 如果未来加入显式 id，可以把 id 接到这里，而不需要改绘制主流程。
     package struct Key: Hashable {
         var path: [Int]
-        var typeName: String
+        var typeID: ObjectIdentifier
     }
 
     /// 一个可复用节点上一帧绘制后的快照。

@@ -1386,6 +1386,72 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(end.grid.map { $0[0].char } == ["T", "2", "3", "Z"])
 }
 
+@Test func scrollViewSkipsOffscreenRenderableNodes() {
+    let node = ScrollView(.vertical, showsIndicators: false) {
+        VStack {
+            ForEach(0..<500) { row in
+                Text("row \(row) — 大量滚动内容")
+            }
+        }
+    }
+    .frame(height: 5)
+    ._makeLayoutNode()
+    let bounds = Rect(x: 0, y: 0, w: 30, h: 5)
+    node.layout(in: bounds)
+
+    let canvas = Canvas(width: bounds.w, height: bounds.h)
+    let cache = RenderCache()
+    Render.drawLaidOut(node, to: canvas, cache: cache)
+
+    // Only the five visible rows and the fixed ScrollView indicator reach the
+    // renderable path; the other 495 text nodes are rejected by the active clip.
+    #expect(cache.stats.totalRenderableNodes <= 6)
+    #expect(String(canvas.grid[0].map(\.char)).hasPrefix("row 0"))
+}
+
+@Test func lazyVStackScrollsLargeCollectionsWithoutMaterializingEveryRow() {
+    let node = ScrollView(.vertical, showsIndicators: false) {
+        LazyVStack(0..<500, spacing: 1, estimatedRowHeight: 1) { row in
+            Text("lazy row \(row)")
+        }
+    }
+    .frame(height: 5)
+    ._makeLayoutNode()
+    let bounds = Rect(x: 0, y: 0, w: 30, h: 5)
+    node.layout(in: bounds)
+
+    let canvas = Canvas(width: bounds.w, height: bounds.h)
+    let cache = RenderCache()
+    Render.drawLaidOut(node, to: canvas, cache: cache)
+
+    #expect(String(canvas.grid[0].map(\.char)).hasPrefix("lazy row 0"))
+    // Five visible rows plus overscan may exist, but the remaining hundreds of
+    // rows must never enter the render tree.
+    #expect(cache.stats.totalRenderableNodes < 20)
+}
+
+@Test func lazyVStackRestoresMeasuredHeightsAndScrollOffsetAcrossFrames() {
+    let app = _TerminalAppHost(width: 24, height: 4) {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(0..<100, estimatedRowHeight: 1) { row in
+                Text("lazy row \(row)")
+            }
+        }
+        .frame(height: 4)
+    }
+
+    var canvas = app.render()
+    #expect(String(canvas.grid[0].map(\.char)).hasPrefix("lazy row 0"))
+
+    #expect(app.send(KeyPress(key: .downArrow)) == .handled)
+    canvas = app.render()
+    #expect(String(canvas.grid[0].map(\.char)).hasPrefix("lazy row 1"))
+
+    #expect(app.send(KeyPress(key: .pageDown)) == .handled)
+    canvas = app.render()
+    #expect(String(canvas.grid[0].map(\.char)).hasPrefix("lazy row 4"))
+}
+
 @Test func horizontalScrollViewUsesLeftAndRightArrowKeys() {
     let app = _TerminalAppHost(width: 3, height: 1) {
         ScrollView(.horizontal, showsIndicators: false) {

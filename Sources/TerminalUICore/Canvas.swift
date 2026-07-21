@@ -158,6 +158,17 @@ package final class Canvas {
         return try body()
     }
 
+    /// Returns whether a renderable rectangle can affect any currently visible cell.
+    /// Render uses this before invoking a leaf's draw path, which is especially
+    /// important for long ScrollView contents: off-screen text and borders should
+    /// not pay Unicode layout, fingerprint, snapshot, or paste costs.
+    package func intersectsCurrentClip(_ rect: Rect) -> Bool {
+        let canvasBounds = Rect(x: 0, y: 0, w: width, h: height)
+        let clip = clipStack.last ?? canvasBounds
+        let visible = rect.intersection(clip).intersection(canvasBounds)
+        return visible.w > 0 && visible.h > 0
+    }
+
     /// 使用统一样式直接填充矩形区域。
     ///
     /// 背景铺底不需要文本分段、Unicode 宽度计算或逐字形清理，直接写 cell

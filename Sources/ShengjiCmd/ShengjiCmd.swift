@@ -488,11 +488,13 @@ private struct ObservatoryDemo: View {
                     if isWide {
                         GroupBox("历史对话", style: .rounded) {
                             ScrollView(.vertical) {
-                                VStack(alignment: .leading) {
-                                    ForEach(conversations) { conversation in
-                                        conversationRow(conversation)
-                                        Spacer(height: 1)
-                                    }
+                                LazyVStack(
+                                    conversations,
+                                    alignment: .leading,
+                                    spacing: 1,
+                                    estimatedRowHeight: 3
+                                ) { conversation in
+                                    conversationRow(conversation)
                                 }
                             }
                             .frame(height: historyHeight)
@@ -508,16 +510,18 @@ private struct ObservatoryDemo: View {
                     VStack {
                         GroupBox(currentConversationTitle, style: .rounded) {
                             ScrollView(.vertical) {
-                                VStack(alignment: .leading) {
-                                    ForEach(currentMessages) { message in
-                                        SelectableChatMessageView(
-                                            message: message,
-                                            index: messageSelectionNumber(for: message),
-                                            isSelecting: isSelectingMessages,
-                                            isSelected: isMessageSelected(message)
-                                        )
-                                        Spacer(height: 1)
-                                    }
+                                LazyVStack(
+                                    currentMessages,
+                                    alignment: .leading,
+                                    spacing: 1,
+                                    estimatedRowHeight: 5
+                                ) { message in
+                                    SelectableChatMessageView(
+                                        message: message,
+                                        index: messageSelectionNumber(for: message),
+                                        isSelecting: isSelectingMessages,
+                                        isSelected: isMessageSelected(message)
+                                    )
                                 }
                             }
                             .frame(height: messageHeight)

@@ -51,7 +51,6 @@ public final class _TerminalAppHost {
         node.layout(in: bounds)
         restoreInteractionState(from: renderedRoot, to: node)
         synchronizeFocus(in: node)
-        node.layout(in: bounds)
         Render.drawLaidOut(node, to: canvas, cache: cache)
         renderedRoot = node
     }
@@ -134,11 +133,13 @@ public final class _TerminalAppHost {
         // RenderCache 负责复用 View 叶子节点绘制快照。两者分工独立：前者减少
         // 画布分配和终端输出，后者减少重复 draw。
         var canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
-        let renderCache = RenderCache(collectsTimings: TerminalDebugRuntime.collectsMetrics)
+        // Per-node DispatchTime sampling is reserved for explicit benchmarks.
+        // Runtime diagnostics only need cache counters and whole-frame timings;
+        // sampling every cache operation becomes visible overhead on dense pages.
+        let renderCache = RenderCache()
 
         while isRunning {
             if renderScheduler.consumeIfDue() {
-                renderCache.collectsTimings = TerminalDebugRuntime.collectsMetrics
                 if clearScreen {
                     // 使用绝对行坐标重绘，不依赖 \n 推进光标。终端底部的换行
                     // 可能触发滚屏，导致最后一行状态栏被卷到画面顶部。

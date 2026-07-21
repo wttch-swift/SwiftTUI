@@ -124,14 +124,26 @@ private final class _ScrollViewLayoutNode: _LayoutContainerStorage, _ContainerLa
             h: axes.contains(.vertical) ? max(rect.h, measured.h) : rect.h
         )
         state.update(viewport: Size(w: rect.w, h: rect.h), content: contentSize)
-        child.layout(
-            in: Rect(
-                x: rect.x - state.offsetX,
-                y: rect.y - state.offsetY,
-                w: contentSize.w,
-                h: contentSize.h
+        if axes == .vertical,
+           let virtual = child as? any _VirtualizedVerticalContent {
+            let previousOffset = state.offsetY
+            let resolvedSize = virtual.layout(viewport: rect, offsetY: state.offsetY)
+            state.update(viewport: rect.size, content: resolvedSize)
+            // Newly measured rows can refine the estimated total height and clamp
+            // an offset near the end. Reposition the visible rows once if needed.
+            if state.offsetY != previousOffset {
+                _ = virtual.layout(viewport: rect, offsetY: state.offsetY)
+            }
+        } else {
+            child.layout(
+                in: Rect(
+                    x: rect.x - state.offsetX,
+                    y: rect.y - state.offsetY,
+                    w: contentSize.w,
+                    h: contentSize.h
+                )
             )
-        )
+        }
         children[1].layout(in: rect)
     }
 
@@ -149,10 +161,20 @@ private final class _ScrollViewLayoutNode: _LayoutContainerStorage, _ContainerLa
 
     func restoreInteractionState(from node: any _FocusTargetLayoutNode) {
         guard let previous = node as? _ScrollViewLayoutNode else { return }
+        if let currentVirtual = child as? any _VirtualizedVerticalContent,
+           let previousVirtual = previous.child as? any _VirtualizedVerticalContent {
+            currentVirtual.restoreVirtualState(from: previousVirtual)
+        }
         state.offsetX = previous.state.offsetX
         state.offsetY = previous.state.offsetY
         state.isFocused = previous.state.isFocused
         state.isFocusManaged = previous.state.isFocusManaged
+        // The new tree has already completed its first layout by the time state
+        // restoration runs. Apply the restored offset to this ScrollView subtree
+        // immediately, so TerminalApp does not need a second full-tree layout.
+        if frame.w > 0, frame.h > 0 {
+            layout(in: frame)
+        }
     }
 }
 
