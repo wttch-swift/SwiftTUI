@@ -10,6 +10,8 @@ import TerminalUIView
 /// 画面里有多少可复用节点真正命中；纳秒字段则把缓存路径拆成更细的成本：
 /// 生成身份 key、计算 fingerprint、查表、paste 旧快照、重画脏节点和 snapshot。
 package struct RenderCacheStats: Equatable {
+    package init() {}
+
     package var totalRenderableNodes = 0
     package var reusableNodes = 0
     package var reusedNodes = 0
@@ -48,7 +50,7 @@ package final class RenderCache {
     package var previous: [Key: Entry] = [:]
     package var current: [Key: Entry] = [:]
     package var stats = RenderCacheStats()
-    package let collectsTimings: Bool
+    package var collectsTimings: Bool
 
     package init(collectsTimings: Bool = false) {
         self.collectsTimings = collectsTimings

@@ -134,23 +134,47 @@ public final class _TerminalAppHost {
         // RenderCache 负责复用 View 叶子节点绘制快照。两者分工独立：前者减少
         // 画布分配和终端输出，后者减少重复 draw。
         var canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
-        let renderCache = RenderCache()
+        let renderCache = RenderCache(collectsTimings: TerminalDebugRuntime.collectsMetrics)
 
         while isRunning {
             if renderScheduler.consumeIfDue() {
+                renderCache.collectsTimings = TerminalDebugRuntime.collectsMetrics
                 if clearScreen {
                     // 使用绝对行坐标重绘，不依赖 \n 推进光标。终端底部的换行
                     // 可能触发滚屏，导致最后一行状态栏被卷到画面顶部。
                     // 这里的闭包只负责把当前帧画到 drawing buffer；renderOutput
                     // 会在闭包结束后和上一帧比较，并交换 presented/drawing。
+                    let frameStart = DispatchTime.now().uptimeNanoseconds
+                    var renderNanoseconds: UInt64 = 0
                     let output = canvasBuffer.renderOutput(colorSupport: colorSupport) { canvas in
+                        let renderStart = DispatchTime.now().uptimeNanoseconds
                         render(to: canvas, cache: renderCache)
+                        renderNanoseconds = DispatchTime.now().uptimeNanoseconds - renderStart
                     }
+                    let totalNanoseconds = DispatchTime.now().uptimeNanoseconds - frameStart
+                    TerminalDebugRuntime.recordFrame(
+                        renderNanoseconds: renderNanoseconds,
+                        outputNanoseconds: totalNanoseconds > renderNanoseconds
+                            ? totalNanoseconds - renderNanoseconds
+                            : 0,
+                        totalNanoseconds: totalNanoseconds,
+                        outputBytes: output.utf8.count,
+                        cacheStats: renderCache.stats
+                    )
                     if !output.isEmpty {
                         writeTerminal(output)
                     }
                 } else {
+                    let frameStart = DispatchTime.now().uptimeNanoseconds
                     let canvas = render()
+                    let totalNanoseconds = DispatchTime.now().uptimeNanoseconds - frameStart
+                    TerminalDebugRuntime.recordFrame(
+                        renderNanoseconds: totalNanoseconds,
+                        outputNanoseconds: 0,
+                        totalNanoseconds: totalNanoseconds,
+                        outputBytes: 0,
+                        cacheStats: RenderCacheStats()
+                    )
                     canvas.flush(terminatingLine: false)
                 }
             }
