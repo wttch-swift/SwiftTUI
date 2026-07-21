@@ -21,6 +21,17 @@ import Glibc
     #expect(size.h == 1)
 }
 
+@Test func fillClearsWideGlyphBaseWhenOverlayStartsOnItsContinuationCell() {
+    let canvas = Canvas(width: 6, height: 1)
+    canvas.drawText(x: 1, y: 0, text: "中", foreground: .white)
+
+    canvas.fill(Rect(x: 2, y: 0, w: 3, h: 1), background: .brightCyan)
+
+    #expect(canvas.grid[0][1] == .Blank)
+    #expect(canvas.grid[0][2].char == " ")
+    #expect(!canvas.grid[0][2].isSpace)
+}
+
 @Test func borderedUsesExistingSpaceAndInsetsItsChild() {
     let intrinsicNode = Text("A").bordered(.green, style: .ascii)._makeLayoutNode()
     let size = intrinsicNode.measure(proposed: ProposedSize())

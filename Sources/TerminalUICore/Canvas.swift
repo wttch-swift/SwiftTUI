@@ -191,6 +191,15 @@ package final class Canvas {
             )
         )
         for y in target.y..<target.maxY {
+            // `fill` is used by sheets and toasts to cover content already on
+            // the canvas. If either horizontal edge cuts through a wide glyph,
+            // clear the complete old glyph first. In particular, covering its
+            // continuation cell must also blank the base cell immediately to
+            // the left of the overlay.
+            clearGlyph(atX: target.x, y: y)
+            if target.w > 1 {
+                clearGlyph(atX: target.maxX - 1, y: y)
+            }
             for x in target.x..<target.maxX {
                 grid[y][x] = cell
             }

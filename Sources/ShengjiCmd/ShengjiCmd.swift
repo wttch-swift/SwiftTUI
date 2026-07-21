@@ -477,6 +477,7 @@ private struct ObservatoryDemo: View {
             let historyWidth = isWide ? 34 : 0
             let gapWidth = isWide ? 2 : 0
             let conversationWidth = max(32, geometry.size.w - historyWidth - gapWidth)
+            let messageBubbleWidth = max(20, Int(Double(conversationWidth) * 0.6))
             let messageHeight = max(8, geometry.size.h - 10)
             let historyHeight = max(8, geometry.size.h - 8)
 
@@ -520,7 +521,8 @@ private struct ObservatoryDemo: View {
                                         message: message,
                                         index: messageSelectionNumber(for: message),
                                         isSelecting: isSelectingMessages,
-                                        isSelected: isMessageSelected(message)
+                                        isSelected: isMessageSelected(message),
+                                        bubbleWidth: messageBubbleWidth
                                     )
                                 }
                             }
@@ -1008,22 +1010,34 @@ private struct SelectableChatMessageView: View {
     let index: Int?
     let isSelecting: Bool
     let isSelected: Bool
+    let bubbleWidth: Int
 
     var body: some View {
-        GroupBox(
-            title,
-            titleAlignment: .leading,
-            style: .rounded
-        ) {
-            Text(message.content)
-                .foregroundColor(.rgb(203, 213, 225))
-            HStack {
+        HStack {
+            if message.role == .user {
                 Spacer()
-                Text(message.timestamp)
-                    .foregroundColor(.rgb(100, 116, 139))
+            }
+
+            GroupBox(
+                title,
+                titleAlignment: message.role == .user ? .trailing : .leading,
+                style: .rounded
+            ) {
+                Text(message.content)
+                    .foregroundColor(.rgb(203, 213, 225))
+                HStack {
+                    Spacer()
+                    Text(message.timestamp)
+                        .foregroundColor(.rgb(100, 116, 139))
+                }
+            }
+            .frame(width: bubbleWidth)
+            .foregroundColor(message.role == .assistant ? .brightCyan : .brightYellow)
+
+            if message.role == .assistant {
+                Spacer()
             }
         }
-        .foregroundColor(message.role == .assistant ? .brightCyan : .brightYellow)
     }
 
     private var title: String {
