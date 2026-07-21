@@ -208,7 +208,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func tabViewNavigationWinsOverFocusedTextFieldArrowKeys() {
     var selection = TestTab.settings
     var text = "abc"
-    let app = TerminalApp(width: 20, height: 4) {
+    let app = _TerminalAppHost(width: 20, height: 4) {
         TabView(selection: Binding(get: { selection }, set: { selection = $0 })) {
             Text("首页").tag(TestTab.home)
             TextField("设置", text: Binding(get: { text }, set: { text = $0 }))
@@ -233,7 +233,7 @@ private func renderIncrementalBenchmarkCanvas(
         var isPresented = true
         var underlyingKeyCount = 0
         var dismissCount = 0
-        let app = TerminalApp(width: 20, height: 10) {
+        let app = _TerminalAppHost(width: 20, height: 10) {
             Text("底层")
                 .frame(width: 20, height: 10)
                 .onKeyPress { _ in
@@ -266,7 +266,7 @@ private func renderIncrementalBenchmarkCanvas(
     var isPresented = true
     var first = ""
     var second = ""
-    let app = TerminalApp(width: 24, height: 8) {
+    let app = _TerminalAppHost(width: 24, height: 8) {
         Text("底层")
             .sheet(isPresented: Binding(get: { isPresented }, set: { isPresented = $0 })) {
                 VStack {
@@ -297,7 +297,7 @@ private func renderIncrementalBenchmarkCanvas(
     var first = ""
     var second = ""
     let focus = FocusState<SheetField?>()
-    let app = TerminalApp(width: 24, height: 8) {
+    let app = _TerminalAppHost(width: 24, height: 8) {
         Text("底层")
             .sheet(isPresented: Binding(get: { isPresented }, set: { isPresented = $0 })) {
                 VStack {
@@ -325,7 +325,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func toastUsesAlignmentWithoutBlockingUnderlyingContent() {
     var isPresented = true
     var keyCount = 0
-    let app = TerminalApp(width: 20, height: 10) {
+    let app = _TerminalAppHost(width: 20, height: 10) {
         Text("底层")
             .frame(width: 20, height: 10)
             .onKeyPress { _ in
@@ -353,7 +353,7 @@ private func renderIncrementalBenchmarkCanvas(
         get: { selection },
         set: { selection = $0 }
     )
-    let app = TerminalApp(width: 28, height: 3) {
+    let app = _TerminalAppHost(width: 28, height: 3) {
         TabView(selection: binding) {
             Text("Home page")
                 .tabItem { Text("Home") }
@@ -381,7 +381,7 @@ private func renderIncrementalBenchmarkCanvas(
 }
 
 @Test func tabViewWithoutSelectionRetainsItsCurrentTabAcrossRenders() {
-    let app = TerminalApp(width: 20, height: 3) {
+    let app = _TerminalAppHost(width: 20, height: 3) {
         TabView {
             Text("First").tabItem { Text("One") }
             Text("Second").tabItem { Text("Two") }
@@ -396,7 +396,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func onEventHandlesKeyPressThroughUnifiedDispatcher() {
     var received = false
-    let app = TerminalApp(width: 20, height: 2) {
+    let app = _TerminalAppHost(width: 20, height: 2) {
         Text("事件")
             .onEvent { event in
                 guard case .key(let keyPress) = event,
@@ -416,7 +416,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func consumedOnEventStopsPropagationToOuterViews() {
     var innerCount = 0
     var outerCount = 0
-    let app = TerminalApp(width: 20, height: 2) {
+    let app = _TerminalAppHost(width: 20, height: 2) {
         Text("事件")
             .onEvent { event in
                 guard case .key = event else { return .ignored }
@@ -438,7 +438,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func incrementalRefreshBenchmarkReportsOutputSavings() {
     var counter = 0
-    let app = TerminalApp(width: 108, height: 32) {
+    let app = _TerminalAppHost(width: 108, height: 32) {
         IncrementalRefreshBenchmarkView(
             counter: Binding(get: { counter }, set: { counter = $0 })
         )
@@ -1359,7 +1359,7 @@ private func renderIncrementalBenchmarkCanvas(
 }
 
 @Test func verticalScrollViewScrollsAndClipsItsContent() {
-    let app = TerminalApp(width: 1, height: 4) {
+    let app = _TerminalAppHost(width: 1, height: 4) {
         VStack {
             Text("T")
             ScrollView(.vertical, showsIndicators: false) {
@@ -1387,7 +1387,7 @@ private func renderIncrementalBenchmarkCanvas(
 }
 
 @Test func horizontalScrollViewUsesLeftAndRightArrowKeys() {
-    let app = TerminalApp(width: 3, height: 1) {
+    let app = _TerminalAppHost(width: 3, height: 1) {
         ScrollView(.horizontal, showsIndicators: false) {
             Text("ABCDE")
         }
@@ -1406,7 +1406,7 @@ private func renderIncrementalBenchmarkCanvas(
 
     let focus = FocusState<Target?>(wrappedValue: .history)
     let text = State(wrappedValue: "")
-    let app = TerminalApp(width: 4, height: 3) {
+    let app = _TerminalAppHost(width: 4, height: 3) {
         VStack {
             ScrollView(.vertical) {
                 VStack {
@@ -1441,7 +1441,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func unmanagedScrollViewReceivesArrowKeysBubbledFromFocusedTextField() {
     let text = State(wrappedValue: "")
-    let app = TerminalApp(width: 5, height: 3) {
+    let app = _TerminalAppHost(width: 5, height: 3) {
         VStack {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack {
@@ -1465,7 +1465,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func rebuiltUnmanagedScrollViewRestoresOffsetAcrossRenderPasses() {
     let text = State(wrappedValue: "")
-    let app = TerminalApp(width: 5, height: 3) {
+    let app = _TerminalAppHost(width: 5, height: 3) {
         RebuiltScrollBenchmarkView(text: text.projectedValue)
     }
 
@@ -1479,7 +1479,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func rebuiltFocusedScrollViewCanReceiveFocusAndRestoreOffset() {
     let focus = FocusState<RebuiltFocusedScrollBenchmarkView.Target?>(wrappedValue: .history)
     let text = State(wrappedValue: "")
-    let app = TerminalApp(width: 5, height: 3) {
+    let app = _TerminalAppHost(width: 5, height: 3) {
         RebuiltFocusedScrollBenchmarkView(focus: focus, text: text.projectedValue)
     }
 
@@ -1503,7 +1503,7 @@ private func renderIncrementalBenchmarkCanvas(
 
     let focus = FocusState<Target?>()
     let text = State(wrappedValue: "")
-    let app = TerminalApp(width: 9, height: 6) {
+    let app = _TerminalAppHost(width: 9, height: 6) {
         VStack {
             GroupBox("History") {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -1550,7 +1550,7 @@ private func renderIncrementalBenchmarkCanvas(
     let focus = FocusState<Target?>()
     let setting = State(wrappedValue: "")
     let input = State(wrappedValue: "")
-    let app = TerminalApp(width: 18, height: 8) {
+    let app = _TerminalAppHost(width: 18, height: 8) {
         TabView(selection: Binding(get: { page }, set: { page = $0 })) {
             TextField("Setting", text: setting.projectedValue)
                 .focused(focus.projectedValue, equals: .setting)
@@ -1614,7 +1614,7 @@ private func renderIncrementalBenchmarkCanvas(
             focus.wrappedValue = newPage == .chat ? .history : nil
         }
     )
-    let app = TerminalApp(width: 54, height: 14) {
+    let app = _TerminalAppHost(width: 54, height: 14) {
         TabView(selection: selection) {
             Text("Overview")
                 .tag(Page.overview)
@@ -1714,7 +1714,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func textFieldUsesSwiftUIBindingSyntaxAndEditsWideCharacters() {
     let value = State(wrappedValue: "A")
-    let app = TerminalApp(width: 6, height: 1) {
+    let app = _TerminalAppHost(width: 6, height: 1) {
         TextField("姓名", text: value.projectedValue)
     }
 
@@ -1730,7 +1730,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func textFieldMovesFocusWithTabAndShiftTab() {
     let first = State(wrappedValue: "")
     let second = State(wrappedValue: "")
-    let app = TerminalApp(width: 5, height: 2) {
+    let app = _TerminalAppHost(width: 5, height: 2) {
         VStack {
             TextField("第一项", text: first.projectedValue)
             TextField("第二项", text: second.projectedValue)
@@ -1754,7 +1754,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func escapeRemovesTextFieldFocusUntilTabSelectsItAgain() {
     let value = State(wrappedValue: "A")
     var editingChanges: [Bool] = []
-    let app = TerminalApp(width: 4, height: 1) {
+    let app = _TerminalAppHost(width: 4, height: 1) {
         TextField(
             "Value",
             text: value.projectedValue,
@@ -1788,7 +1788,7 @@ private func renderIncrementalBenchmarkCanvas(
     let first = State(wrappedValue: "A")
     let second = State(wrappedValue: "B")
     let focus = FocusState<Field?>(wrappedValue: .second)
-    let app = TerminalApp(width: 5, height: 2) {
+    let app = _TerminalAppHost(width: 5, height: 2) {
         VStack {
             TextField("First", text: first.projectedValue)
                 .focused(focus.projectedValue, equals: .first)
@@ -1816,7 +1816,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func boolFocusStateStartsUnfocusedAndTabWritesBackTrue() {
     let value = State(wrappedValue: "")
     let focus = FocusState<Bool>()
-    let app = TerminalApp(width: 5, height: 1) {
+    let app = _TerminalAppHost(width: 5, height: 1) {
         TextField("Value", text: value.projectedValue)
             .focused(focus.projectedValue)
     }
@@ -1833,7 +1833,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func borderedViewUsesSharedFocusColorForItsFocusedDescendant() {
     let value = State(wrappedValue: "A")
-    let app = TerminalApp(width: 5, height: 3) {
+    let app = _TerminalAppHost(width: 5, height: 3) {
         TextField("Value", text: value.projectedValue)
             .bordered(.gray, style: .rounded)
     }
@@ -1848,7 +1848,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func focusBorderColorCanBeCustomizedOrDisabled() {
     let customValue = State(wrappedValue: "A")
-    let custom = TerminalApp(width: 5, height: 3) {
+    let custom = _TerminalAppHost(width: 5, height: 3) {
         TextField("Value", text: customValue.projectedValue)
             .bordered(.gray)
             .focusBorderColor(.brightGreen)
@@ -1856,7 +1856,7 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(custom.render().grid[0][0].style.foregroundColor == .brightGreen)
 
     let disabledValue = State(wrappedValue: "B")
-    let disabled = TerminalApp(width: 5, height: 3) {
+    let disabled = _TerminalAppHost(width: 5, height: 3) {
         TextField("Value", text: disabledValue.projectedValue)
             .bordered(.magenta)
             .focusEffectDisabled()
@@ -1866,7 +1866,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func accentColorDrivesFocusedBorderAndTextFieldCursor() {
     let borderedValue = State(wrappedValue: "A")
-    let bordered = TerminalApp(width: 5, height: 3) {
+    let bordered = _TerminalAppHost(width: 5, height: 3) {
         TextField("Value", text: borderedValue.projectedValue)
             .bordered(.gray)
             .accentColor(.brightMagenta)
@@ -1874,7 +1874,7 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(bordered.render().grid[0][0].style.foregroundColor == .brightMagenta)
 
     let cursorValue = State(wrappedValue: "")
-    let cursor = TerminalApp(width: 6, height: 1) {
+    let cursor = _TerminalAppHost(width: 6, height: 1) {
         TextField("Value", text: cursorValue.projectedValue)
             .accentColor(.brightGreen)
     }
@@ -1885,7 +1885,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func groupBoxBackgroundBorderUsesTheSharedFocusEffect() {
     let value = State(wrappedValue: "A")
-    let app = TerminalApp(width: 9, height: 5) {
+    let app = _TerminalAppHost(width: 9, height: 5) {
         GroupBox("Input") {
             TextField("Value", text: value.projectedValue)
         }
@@ -1903,7 +1903,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func textFieldShowsPlaceholderCursorAndScrollsHorizontally() {
     let empty = State(wrappedValue: "")
-    let placeholderApp = TerminalApp(width: 4, height: 1) {
+    let placeholderApp = _TerminalAppHost(width: 4, height: 1) {
         TextField("Name", text: empty.projectedValue)
     }
     let placeholder = placeholderApp.render()
@@ -1915,7 +1915,7 @@ private func renderIncrementalBenchmarkCanvas(
     #expect(placeholder.grid[0][1].style.backgroundColor == .black)
 
     let long = State(wrappedValue: "ABCDE")
-    let scrollingApp = TerminalApp(width: 3, height: 1) {
+    let scrollingApp = _TerminalAppHost(width: 3, height: 1) {
         TextField("值", text: long.projectedValue)
     }
     #expect(String(scrollingApp.render().grid[0].map(\.char)) == "DE▏")
@@ -1923,7 +1923,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func textFieldShowsInsertionCursorAfterTheLastCharacter() {
     let value = State(wrappedValue: "Alice")
-    let app = TerminalApp(width: 8, height: 1) {
+    let app = _TerminalAppHost(width: 8, height: 1) {
         TextField("姓名", text: value.projectedValue)
     }
 
@@ -1935,7 +1935,7 @@ private func renderIncrementalBenchmarkCanvas(
 @Test func textFieldUsesAColoredInsertionCursorToShowFocus() {
     let first = State(wrappedValue: "A")
     let second = State(wrappedValue: "B")
-    let app = TerminalApp(width: 4, height: 2) {
+    let app = _TerminalAppHost(width: 4, height: 2) {
         VStack {
             TextField("First", text: first.projectedValue)
             TextField("Second", text: second.projectedValue)
@@ -1957,7 +1957,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func borderedChatInputClipsTextBeforeTheRightBorder() {
     let value = State(wrappedValue: "")
-    let app = TerminalApp(width: 34, height: 3) {
+    let app = _TerminalAppHost(width: 34, height: 3) {
         HStack(alignment: .center) {
             Text("❯")
                 .foregroundColor(.brightCyan)
@@ -1992,7 +1992,7 @@ private func renderIncrementalBenchmarkCanvas(
     let value = State(wrappedValue: "")
     var editingChanges: [Bool] = []
     var commits = 0
-    let app = TerminalApp(width: 4, height: 1) {
+    let app = _TerminalAppHost(width: 4, height: 1) {
         TextField(
             "Value",
             text: value.projectedValue,
@@ -2017,7 +2017,7 @@ private func renderIncrementalBenchmarkCanvas(
     }
 
     let form = Form()
-    let app = TerminalApp(width: 5, height: 1) { form }
+    let app = _TerminalAppHost(width: 5, height: 1) { form }
     _ = app.render()
     _ = app.send(KeyPress(key: .leftArrow))
     _ = app.render()
@@ -2085,7 +2085,7 @@ private func renderIncrementalBenchmarkCanvas(
 
 @Test func keyPressModifierFiltersAndBubblesEvents() {
     var received: [String] = []
-    let app = TerminalApp(width: 4, height: 1) {
+    let app = _TerminalAppHost(width: 4, height: 1) {
         Text("key")
             .onKeyPress(.leftArrow) { _ in
                 received.append("left")

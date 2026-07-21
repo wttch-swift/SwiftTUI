@@ -4,7 +4,7 @@ import TerminalUILayout
 import TerminalUIRender
 
 /// A one-way View → _Layoutable → Render → Canvas host.
-public final class TerminalApp {
+public final class _TerminalAppHost {
     private var width: Int
     private var height: Int
     private let root: any View
@@ -21,14 +21,14 @@ public final class TerminalApp {
         self.root = ZStack(content)
     }
 
-    /// Observes terminal lifecycle signals on TerminalApp's main event loop.
+    /// Observes terminal lifecycle signals on the host's main event loop.
     ///
     /// The callback runs after the POSIX signal has been converted to a regular
     /// runtime event, so it may update `@State` or post TerminalStateRuntime
-    /// actions. TerminalApp still performs mandatory terminal cleanup, suspend,
+    /// actions. _TerminalAppHost still performs mandatory terminal cleanup, suspend,
     /// resume and resize behavior after notifying the callback.
     @discardableResult
-    public func onSignal(_ handler: @escaping (TerminalSignal) -> Void) -> TerminalApp {
+    public func onSignal(_ handler: @escaping (TerminalSignal) -> Void) -> _TerminalAppHost {
         signalHandler = handler
         return self
     }
@@ -523,6 +523,40 @@ private extension TerminalEventResult {
         switch self {
         case .requestRender: true
         case .handled, .ignored: false
+        }
+    }
+}
+
+// MARK: - TerminalApp Protocol Extension
+
+extension TerminalApp {
+    /// 自动检测终端尺寸、构造宿主并启动事件循环。
+    ///
+    /// 类似于 SwiftUI `@main` 的默认 `main()` 实现：
+    /// ```swift
+    /// @main
+    /// struct MyApp: TerminalApp {
+    ///     var body: some View {
+    ///         Text("Hello")
+    ///     }
+    /// }
+    /// ```
+    //
+    /// 非 TTY 环境（如 Xcode 控制台或管道）下会回退到单帧渲染并 flush 输出。
+    public static func main() {
+        let size = TerminalSizeReader.current(
+            or: TerminalSize(columns: 108, rows: 32)
+        )
+        let host = _TerminalAppHost(width: size.width, height: size.height) {
+            Self().body
+        }
+
+        do {
+            try host.run()
+        } catch TerminalInputError.notTerminal {
+            host.render().flush()
+        } catch {
+            print("终端输入失败：\(error)")
         }
     }
 }

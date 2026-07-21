@@ -2,20 +2,16 @@ import Foundation
 import TerminalUI
 
 @main
-struct ShengjiCmd {
-    static func main() {
-        let size = TerminalSizeReader.current(or: TerminalSize(columns: 108, rows: 32))
-        let app = TerminalApp(width: size.width, height: size.height) {
-            ObservatoryDemo(isWide: size.width >= 96)
-        }
+struct ShengjiCmd: TerminalApp {
+    let isWide: Bool
 
-        do {
-            try app.run()
-        } catch TerminalInputError.notTerminal {
-            app.render().flush()
-        } catch {
-            print("终端输入失败：\(error)")
-        }
+    init() {
+        let size = TerminalSizeReader.current(or: TerminalSize(columns: 108, rows: 32))
+        isWide = size.width >= 96
+    }
+
+    var body: some View {
+        ObservatoryDemo(isWide: isWide)
     }
 }
 
