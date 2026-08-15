@@ -1,0 +1,33 @@
+name: Build (Windows)
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 统一安装 Swift 6.3.3 工具链（与 Package.swift 的 swift-tools-version: 6.3 对应，
+      # 各平台都从 swift.org 拉取，保证一致）。
+      - name: Install Swift 6.3.3 toolchain
+        uses: compnerd/gha-setup-swift@v0.4.0
+        with:
+          swift-version: swift-6.3.3-release
+          swift-build: 6.3.3-RELEASE
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
