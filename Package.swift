@@ -5,6 +5,9 @@ import PackageDescription
 
 let package = Package(
     name: "TUIDemo",
+    platforms: [
+        .macOS(.v14),
+    ],
     products: [
         // 命令行 SwiftUI 引擎
         .library(name: "TerminalUI", targets: ["TerminalUI"]),

@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-26
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 统一安装 Swift 6.3.3 工具链（与 Package.swift 的 swift-tools-version: 6.3 对应，
+      # 各平台都从 swift.org 拉取，保证一致）。
+      - name: Install Swift 6.3.3 toolchain
+        uses: compnerd/gha-setup-swift@v0.4.0
+        with:
+          swift-version: swift-6.3.3-release
+          swift-build: 6.3.3-RELEASE
+
+      # swift.org 工具链在 Ubuntu 24.04 上要求的运行时/链接依赖。
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            binutils git gnupg2 libc6-dev libcurl4-openssl-dev libedit2 \
+            libgcc-13-dev libpython3-dev libsqlite3-0 libstdc++-13-dev \
+            libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
