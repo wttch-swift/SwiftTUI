@@ -13,29 +13,49 @@ package final class Canvas {
     package var grid: [[_Cell]]
     /// Render 遍历中当前生效的嵌套裁剪区域。
     private var clipStack: [Rect] = []
+    /// 本画布上写过内容的行。
+    ///
+    /// 所有写网格的入口都会把行标记为脏。`clean()` 只清空脏行而不是整张网格；
+    /// `positionedOutput(comparedTo:)` 也只比较“本画布脏行 ∪ 上一帧画布脏行”。
+    /// 两帧都未写过的行从创建起就是空白，按构造必然相等，无需逐 cell 比较。
+    package var dirtyRows: [Bool]
 
     /// 创建空画布。负尺寸会钳制为零。
     package init(width: Int, height: Int) {
         self.width = max(0, width)
         self.height = max(0, height)
         grid = Array(repeating: Array(repeating: .Blank, count: max(0, width)), count: max(0, height))
+        dirtyRows = Array(repeating: false, count: max(0, height))
     }
 
     /// 清除所有已绘制内容，同时保留画布尺寸。
+    ///
+    /// 只清空曾经写过的行，其余行从创建起就是空白，无需逐 cell 置空。清除后这些
+    /// 行会从脏行集合中移除。
     package func clean() {
         clipStack.removeAll(keepingCapacity: true)
-        for y in grid.indices {
+        for y in grid.indices where dirtyRows[y] {
             for x in grid[y].indices {
                 grid[y][x] = .Blank
             }
+            dirtyRows[y] = false
         }
+    }
+
+    /// 记录对某一行的一次写入，供 `clean()` 与 diff 输出使用。
+    ///
+    /// 所有写网格的公开入口（setCharacter / fill / paste / drawBox）都必须调用它，
+    /// 否则该行不会被清理或比较。
+    private func markDirty(_ y: Int) {
+        guard grid.indices.contains(y) else { return }
+        dirtyRows[y] = true
     }
 
     /// 把网格逐行编码为终端可打印字符串。
     /// - Parameter colorSupport: 目标终端支持的颜色深度。
     /// - Returns: 行之间由换行符连接的完整画面。
     package func output(colorSupport: TerminalColorSupport = .current) -> String {
-        grid.map { encode(row: $0, colorSupport: colorSupport) }
+        grid.map { encode(cells: $0, colorSupport: colorSupport) }
             .joined(separator: "\n")
     }
 
@@ -46,14 +66,15 @@ package final class Canvas {
     /// 被卷到画面顶部。
     package func positionedOutput(colorSupport: TerminalColorSupport = .current) -> String {
         grid.enumerated().map { index, row in
-            "\u{001B}[\(index + 1);1H" + encode(row: row, colorSupport: colorSupport)
+            "\u{001B}[\(index + 1);1H" + encode(cells: row, colorSupport: colorSupport)
         }.joined()
     }
 
-    /// 只编码与上一帧不同的行，减少交互式界面的终端写入量。
+    /// 只编码与上一帧不同的行（行内再做列级 diff），减少交互式界面的终端写入量。
     ///
-    /// 行内仍按完整宽度输出，因此不需要处理宽字符右半格和旧内容清除等复杂
-    /// 情况；尺寸变化或没有上一帧时自动退回完整画面。
+    /// 只比较“本画布写过的行 ∪ 上一帧画布写过的行”；两帧都未写过的行按构造必然
+    /// 相等。命中的行先剔除公共前缀/后缀，只重发变化的列区间，并保证变化区不切断
+    /// 宽字符。尺寸变化或没有上一帧时自动退回完整画面。
     package func positionedOutput(
         comparedTo previous: Canvas?,
         colorSupport: TerminalColorSupport = .current
@@ -64,10 +85,43 @@ package final class Canvas {
             return positionedOutput(colorSupport: colorSupport)
         }
 
-        return grid.enumerated().compactMap { index, row in
-            guard row != previous.grid[index] else { return nil }
-            return "\u{001B}[\(index + 1);1H" + encode(row: row, colorSupport: colorSupport)
+        // 脏行不变量：两帧都未写过的行必然两端都是空白，按构造相等，直接跳过；
+        // 只需要比较“本帧写过的行”与“上一帧画布上仍有内容的行”。命中的行再做
+        // 行内列级 diff，只重发变化的列区间而不是整行。
+        return (0..<height).compactMap { y in
+            guard dirtyRows[y] || previous.dirtyRows[y] else { return nil }
+            let newRow = grid[y]
+            guard newRow != previous.grid[y] else { return nil }
+            return encodeRowDelta(newRow, previous.grid[y], row: y, colorSupport: colorSupport)
         }.joined()
+    }
+
+    /// 编码一行中真正变化的列区间，而不是整行。
+    ///
+    /// 先找出与上一行相同的公共前缀和后缀，中间的区间是变化区；若变化区覆盖整行，
+    /// 退回整行重发。输出用 CUP 定位到变化区起点，后续字符流保持终端光标与 cell
+    /// 对齐：宽字符的 continuation cell 不打印，光标按其字形宽度自动推进。
+    private func encodeRowDelta(
+        _ newRow: [_Cell],
+        _ oldRow: [_Cell],
+        row: Int,
+        colorSupport: TerminalColorSupport
+    ) -> String {
+        let rowWidth = newRow.count
+        var lo = 0
+        while lo < rowWidth, newRow[lo] == oldRow[lo] { lo += 1 }
+        var hi = rowWidth
+        while hi > lo, newRow[hi - 1] == oldRow[hi - 1] { hi -= 1 }
+
+        if lo == 0 && hi == rowWidth {
+            return "\u{001B}[\(row + 1);1H" + encode(cells: newRow, colorSupport: colorSupport)
+        }
+
+        // 行内 diff 不能把宽字符从中间切开。若变化区起点落在 continuation cell 上，
+        // 向左回溯到它的基准格；基准格必然也发生变化（否则前缀扫描会包含它）。
+        while lo > 0, newRow[lo].isSpace { lo -= 1 }
+
+        return "\u{001B}[\(row + 1);\(lo + 1)H" + encode(cells: newRow[lo..<hi], colorSupport: colorSupport)
     }
 
     /// 复制指定矩形内的 cell 快照。超出画布的部分会被裁掉。
@@ -97,6 +151,7 @@ package final class Canvas {
         for (dy, y) in (target.y..<target.maxY).enumerated() where cells.indices.contains(dy) {
             let count = min(target.w, cells[dy].count)
             guard count > 0 else { continue }
+            markDirty(y)
             grid[y].replaceSubrange(target.x..<(target.x + count), with: cells[dy][0..<count])
         }
     }
@@ -106,7 +161,10 @@ package final class Canvas {
     /// 旧实现为每个字符分别输出 `SGR + 字符 + ESC[0m`，一帧会产生大量
     /// 控制序列。在频繁重绘和终端边界附近，序列一旦被拆开就可能把 `[0m`
     /// 当作普通文字显示。按样式分段后，每段只需要一对控制序列。
-    private func encode(row: [_Cell], colorSupport: TerminalColorSupport) -> String {
+    private func encode<C: Collection>(
+        cells: C,
+        colorSupport: TerminalColorSupport
+    ) -> String where C.Element == _Cell {
         var result = ""
         var run = ""
         var runStyle: _CellStyle?
@@ -124,7 +182,7 @@ package final class Canvas {
             )
         }
 
-        for cell in row where !cell.isSpace {
+        for cell in cells where !cell.isSpace {
             if runStyle != cell.style {
                 appendRun()
                 run = ""
@@ -200,6 +258,7 @@ package final class Canvas {
             if target.w > 1 {
                 clearGlyph(atX: target.maxX - 1, y: y)
             }
+            markDirty(y)
             for x in target.x..<target.maxX {
                 grid[y][x] = cell
             }
@@ -221,6 +280,7 @@ package final class Canvas {
         strikethrough: Bool = false
     ) {
         guard grid.indices.contains(y), grid[y].indices.contains(x) else { return }
+        markDirty(y)
         guard let char else {
             grid[y][x] = .Space
             return
@@ -354,6 +414,7 @@ package final class Canvas {
         if let clip = clipStack.last {
             guard x >= clip.x, x < clip.maxX, y >= clip.y, y < clip.maxY else { return }
         }
+        markDirty(y)
 
         // 边框连接信息直接由当前字形恢复，无需为 Canvas 维护第二份二维网格。
         let existing = _BorderCell(glyph: grid[y][x].char)

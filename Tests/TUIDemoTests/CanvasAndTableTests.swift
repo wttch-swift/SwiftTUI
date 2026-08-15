@@ -253,7 +253,85 @@ import Glibc
     current.drawText(x: 0, y: 1, text: "BBXB", foreground: .white)
 
     let output = current.positionedOutput(comparedTo: previous, colorSupport: .none)
-    #expect(output == "\u{001B}[2;1HBBXB")
+    // 行内列级 diff：公共前缀 "BB" 与公共后缀 "B" 不变，只重发变化的列区间 "X"。
+    #expect(output == "\u{001B}[2;3HX")
+}
+
+@Test func columnDiffClearsOldContentWhenNewTextIsShorter() {
+    let previous = Canvas(width: 5, height: 1)
+    previous.drawText(x: 0, y: 0, text: "abcde", foreground: .white)
+    let current = Canvas(width: 5, height: 1)
+    current.drawText(x: 0, y: 0, text: "abc", foreground: .white)
+
+    // 变化区覆盖旧文本的尾部，输出空格把残留的 "de" 清掉。
+    let output = current.positionedOutput(comparedTo: previous, colorSupport: .none)
+    #expect(output == "\u{001B}[1;4H  ")
+}
+
+@Test func columnDiffReplacesWideGlyphWithoutSplittingIt() {
+    let previous = Canvas(width: 5, height: 1)
+    previous.drawText(x: 0, y: 0, text: "A中B", foreground: .white)
+    let current = Canvas(width: 5, height: 1)
+    current.drawText(x: 0, y: 0, text: "A文B", foreground: .white)
+
+    // 公共后缀含 continuation cell，变化区只覆盖宽字符基准格本身。
+    let output = current.positionedOutput(comparedTo: previous, colorSupport: .none)
+    #expect(output == "\u{001B}[1;2H文")
+}
+
+@Test func columnDiffCoversRemovedWideGlyphContinuation() {
+    let previous = Canvas(width: 4, height: 1)
+    previous.drawText(x: 0, y: 0, text: "中B", foreground: .white)
+    let current = Canvas(width: 4, height: 1)
+    current.drawText(x: 0, y: 0, text: "BA", foreground: .white)
+
+    // 宽字符被移除后，变化区必须覆盖它的两个 cell，输出空格清掉 continuation。
+    let output = current.positionedOutput(comparedTo: previous, colorSupport: .none)
+    #expect(output == "\u{001B}[1;1HBA ")
+}
+
+@Test func dirtyRowDiffBlanksRowsOnlyTheOtherCanvasWrote() {
+    // 上一帧画布在第 1 行写了内容，本帧画布完全没写那一行：diff 必须把该行清空。
+    let previous = Canvas(width: 4, height: 3)
+    previous.drawText(x: 0, y: 1, text: "DATA", foreground: .white)
+    let current = Canvas(width: 4, height: 3)
+    current.drawText(x: 0, y: 0, text: "NEW ", foreground: .white)
+
+    let output = current.positionedOutput(comparedTo: previous, colorSupport: .none)
+    #expect(output == "\u{001B}[1;1HNEW\u{001B}[2;1H    ")
+}
+
+@Test func cleanOnlyBlanksWrittenRows() {
+    let canvas = Canvas(width: 4, height: 3)
+    canvas.drawText(x: 0, y: 0, text: "AAA", foreground: .white)
+    canvas.drawText(x: 0, y: 2, text: "CCC", foreground: .white)
+
+    canvas.clean()
+
+    // 从未写过的中间行保持空白，写过的两行被清空，脏行标记全部复位。
+    #expect(canvas.grid[0].allSatisfy { $0 == .Blank })
+    #expect(canvas.grid[1].allSatisfy { $0 == .Blank })
+    #expect(canvas.grid[2].allSatisfy { $0 == .Blank })
+    #expect(canvas.dirtyRows == [false, false, false])
+}
+
+@Test func doubleBufferEmitsFullThenColumnThenNothing() {
+    let buffer = CanvasDoubleBuffer(width: 6, height: 1)
+
+    let first = buffer.renderOutput(colorSupport: .none) { canvas in
+        canvas.drawText(x: 0, y: 0, text: "123456", foreground: .white)
+    }
+    #expect(first == "\u{001B}[1;1H123456")
+
+    let second = buffer.renderOutput(colorSupport: .none) { canvas in
+        canvas.drawText(x: 0, y: 0, text: "12X456", foreground: .white)
+    }
+    #expect(second == "\u{001B}[1;3HX")
+
+    let unchanged = buffer.renderOutput(colorSupport: .none) { canvas in
+        canvas.drawText(x: 0, y: 0, text: "12X456", foreground: .white)
+    }
+    #expect(unchanged == "")
 }
 
 @Test func backgroundColorFillsPaddingAndOtherUnpaintedCells() {
