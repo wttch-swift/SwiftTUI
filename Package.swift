@@ -4,8 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "ShengjiCmd",
-    platforms: [.macOS(.v14)],
+    name: "TUIDemo",
     products: [
         // 命令行 SwiftUI 引擎
         .library(name: "TerminalUI", targets: ["TerminalUI"]),
@@ -66,12 +65,12 @@ let package = Package(
         ),
 
         .executableTarget(
-            name: "ShengjiCmd",
+            name: "TUIDemo",
             dependencies: ["TerminalUI"],
             exclude: ["README.md"]
         ),
         .testTarget(
-            name: "ShengjiCmdTests",
+            name: "TUIDemoTests",
             dependencies: [
                 "TerminalUI",
                 "TerminalUICore",

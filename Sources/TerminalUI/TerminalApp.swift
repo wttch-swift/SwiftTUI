@@ -104,28 +104,31 @@ public final class _TerminalAppHost {
 
     /// 进入终端事件循环，监听按键并在状态变化后重绘。
     ///
-    /// 使用 POSIX termios，不依赖 Combine；支持 macOS 与 Linux 终端。
+    /// 不依赖 Combine；输入、信号、尺寸与输出准备统一收敛在 `_TerminalPlatform`，
+    /// 同时支持 Windows 控制台与 macOS / Linux 终端。
     public func run(clearScreen: Bool = true) throws {
-        let input = _TerminalInput()
-        try input.start()
+        let platform = _TerminalPlatform()
+        try platform.startInput()
         // 终端颜色能力在一次运行期间保持不变。ProcessInfo.environment 的构造
         // 成本很高，不能在每次按键重绘时通过 `.current` 重复检测。
         let colorSupport = TerminalColorSupport.current
-
         let events = _TerminalAppEventQueue()
-        let signals = _TerminalSignalCoordinator()
         TerminalStateRuntime.setEventHandler { events.push(.state($0)) }
-        signals.start { events.push(.terminal(.signal($0))) }
+        platform.startSignals { events.push(.terminal(.signal($0))) }
 
         defer {
             TerminalStateRuntime.setEventHandler(nil)
-            input.stop()
+            platform.stopInput()
             leaveTerminalScreen(clearScreen: clearScreen)
+            // 在停止输出 ANSI 之后再恢复控制台模式，避免残留转义序列被原样显示。
+            platform.restoreOutput()
             // Restore the embedding process's original signal dispositions only
             // after the terminal is safe for the shell again.
-            signals.stop()
+            platform.stopSignals()
         }
 
+        // 必须先于任何 ANSI 输出开启 VT 处理，否则 Windows conhost 不会渲染颜色。
+        platform.prepareOutput()
         enterTerminalScreen(clearScreen: clearScreen)
 
         var isRunning = true
@@ -184,7 +187,7 @@ public final class _TerminalAppHost {
             // 较短轮询周期使后台动画请求能及时进入主循环，同时 poll 在无输入时
             // 仍会休眠，不会产生忙等待。有待刷新的帧时，轮询只睡到下一帧时间点，
             // 让多次状态变化先进入缓冲，再在固定节奏上合并成一次绘制。
-            if let key = try input.readKey(timeoutMilliseconds: renderScheduler.pollTimeoutMilliseconds) {
+            if let key = try platform.readKey(timeoutMilliseconds: renderScheduler.pollTimeoutMilliseconds) {
                 events.push(.terminal(.key(key)))
             }
 
@@ -219,10 +222,10 @@ public final class _TerminalAppHost {
                         case .suspend:
                             // Shell must regain a cooked, visible terminal while this
                             // process is stopped. raise(SIGTSTP) returns after `fg`.
-                            input.stop()
+                            platform.stopInput()
                             leaveTerminalScreen(clearScreen: clearScreen)
-                            signals.suspendCurrentProcess()
-                            try input.start()
+                            platform.suspendCurrentProcess()
+                            try platform.startInput()
                             enterTerminalScreen(clearScreen: clearScreen)
                             if let size = updateTerminalSize(),
                                dispatch(.resize(size)).requestsRender {

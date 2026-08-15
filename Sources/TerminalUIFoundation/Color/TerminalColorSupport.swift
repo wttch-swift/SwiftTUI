@@ -44,7 +44,10 @@ public enum TerminalColorSupport: Int, Comparable, Sendable, CustomStringConvert
     }
 
     public static var current: TerminalColorSupport {
-        detect(isTerminal: isatty(STDOUT_FILENO) == 1)
+        // POSIX 的 isatty 按规范返回 1，但 Windows MSVCRT 返回的是非零的模式值
+        //（实际观察到 64），因此用 `!= 0` 判断，避免 Windows 下被误判为非 TTY
+        // 而整体禁用颜色。
+        detect(isTerminal: isatty(STDOUT_FILENO) != 0)
     }
 
     public func supportsNatively(_ color: Color) -> Bool {

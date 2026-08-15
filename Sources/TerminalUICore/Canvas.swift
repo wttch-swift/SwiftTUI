@@ -145,7 +145,7 @@ package final class Canvas {
         print(output(), terminator: terminatingLine ? "\n" : "")
     }
 
-    /// Compatibility entry used by the ShengjiCmd scene package.
+    /// Compatibility entry used by the TUIDemo scene package.
     package func render() { flush() }
 
     package func withClip<Result>(_ rect: Rect, _ body: () throws -> Result) rethrows -> Result {

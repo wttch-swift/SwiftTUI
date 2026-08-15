@@ -2,7 +2,7 @@ import Foundation
 import TerminalUI
 
 @main
-struct ShengjiCmd: TerminalApp {
+struct TUIDemo: TerminalApp {
     let isWide: Bool
 
     init() {

@@ -1,10 +1,10 @@
-# ShengjiCmd / TerminalUI
+# TUIDemo / TerminalUI
 
 TerminalUI 是一个使用 Swift 编写的声明式终端 UI 实验框架。它借鉴 SwiftUI 的
 `View`、`ViewBuilder`、`State`、`Binding`、`FocusState` 和 modifier 组合方式，
 但最终把界面布局到终端字符单元格，并通过 ANSI 控制序列增量输出。
 
-仓库同时包含 `ShengjiCmd` 示例程序，用一个可交互的观测站界面展示布局、表格、
+仓库同时包含 `TUIDemo` 示例程序，用一个可交互的观测站界面展示布局、表格、
 滚动、输入框、焦点、标签页、弹层和文本动画。
 
 ## 设计目标
@@ -25,7 +25,7 @@ flowchart TD
     Layout[TerminalUILayout\nView 适配与布局树]
     Render[TerminalUIRender\n渲染遍历]
     Facade[TerminalUI\n公共门面与 TerminalApp]
-    Demo[ShengjiCmd\n示例程序]
+    Demo[TUIDemo\n示例程序]
 
     Foundation --> Core
     Foundation --> View
@@ -60,8 +60,8 @@ flowchart TD
 | `TerminalUILayout` | `TerminalUIFoundation`、`TerminalUICore`、`TerminalUIView` | package 内部布局实现 |
 | `TerminalUIRender` | `TerminalUIFoundation`、`TerminalUICore`、`TerminalUIView`、`TerminalUILayout` | package 内部渲染协调器 |
 | `TerminalUI` | Foundation、Core、View、Layout、Render 五个 target | 唯一 library product |
-| `ShengjiCmd` | `TerminalUI` | 示例 executable target |
-| `ShengjiCmdTests` | `TerminalUI`、Core、View、Layout、Render | package 内部测试 target |
+| `TUIDemo` | `TerminalUI` | 示例 executable target |
+| `TUIDemoTests` | `TerminalUI`、Core、View、Layout、Render | package 内部测试 target |
 
 这里刻意让 `TerminalUIView` 和 `TerminalUICore` 保持平级：View 声明不会接触 Canvas，
 Core 也不会导入 View。二者第一次汇合于 `TerminalUILayout`，随后由
@@ -103,7 +103,7 @@ View 声明
 | [TerminalUILayout](Sources/TerminalUILayout/README.md) | View 到 LayoutNode 的适配和布局算法 | 否，package 内部实现 |
 | [TerminalUIRender](Sources/TerminalUIRender/README.md) | 环境传播、裁剪和绘制遍历 | 否，package 内部实现 |
 | [TerminalUI](Sources/TerminalUI/README.md) | 最终公共入口、终端尺寸和事件循环 | 是 |
-| [ShengjiCmd](Sources/ShengjiCmd/README.md) | 完整交互示例 | 可作为用法参考 |
+| [TUIDemo](Sources/TUIDemo/README.md) | 完整交互示例 | 可作为用法参考 |
 
 Swift Package 当前只发布一个 library product：`TerminalUI`。其他 target 用来建立
 编译边界；内部关键类型使用 `package` 或默认访问级别，即使模块随依赖被构建，
@@ -114,14 +114,14 @@ Swift Package 当前只发布一个 library product：`TerminalUI`。其他 targ
 在另一个 Swift Package 中添加本仓库依赖，并只依赖 `TerminalUI` product：
 
 ```swift
-.package(path: "../ShengjiCmd")
+.package(path: "../TUIDemo")
 ```
 
 ```swift
 .executableTarget(
     name: "Example",
     dependencies: [
-        .product(name: "TerminalUI", package: "ShengjiCmd")
+        .product(name: "TerminalUI", package: "TUIDemo")
     ]
 )
 ```
@@ -186,7 +186,7 @@ try app.run()
 ```bash
 swift build
 swift test
-swift run ShengjiCmd
+swift run TUIDemo
 ```
 
 当前测试覆盖布局约束、宽字符、Canvas 输出、颜色降级、焦点、输入框、滚动、
