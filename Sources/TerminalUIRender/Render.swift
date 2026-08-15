@@ -8,7 +8,7 @@ package enum Render {
     ///   - root: 已由 View 展开得到的布局树根节点。
     ///   - bounds: 根节点可使用的最终画布区域。
     ///   - canvas: 接收字符单元格的目标画布。
-    package static func render(_ root: any _LayoutNode, in bounds: Rect, to canvas: Canvas) {
+    package static func render(_ root: any _Layoutable, in bounds: Rect, to canvas: Canvas) {
         render(root, in: bounds, to: canvas, cache: nil)
     }
 
@@ -17,7 +17,7 @@ package enum Render {
     /// 这里仍然每帧执行 layout。当前优化只减少 draw 阶段的大面积重复写 cell；
     /// layout 是否可以进一步跳过，需要更强的布局依赖追踪，暂时不混进第一版。
     package static func render(
-        _ root: any _LayoutNode,
+        _ root: any _Layoutable,
         in bounds: Rect,
         to canvas: Canvas,
         cache: RenderCache?
@@ -28,21 +28,22 @@ package enum Render {
 
     /// 绘制一棵已经完成 layout 的节点树。主要用于测试和分阶段性能统计。
     package static func drawLaidOut(
-        _ root: any _LayoutNode,
+        _ root: any _Layoutable,
         to canvas: Canvas,
         cache: RenderCache?
     ) {
         cache?.beginFrame()
-        draw(root, to: canvas, environment: EnvironmentValues(), path: [], cache: cache)
+        var path: [Int] = []
+        draw(root, to: canvas, environment: EnvironmentValues(), path: &path, cache: cache)
         cache?.endFrame()
     }
 
     /// 深度优先绘制节点，并沿当前分支传递解析后的环境值。
     private static func draw(
-        _ node: any _LayoutNode,
+        _ node: any _Layoutable,
         to canvas: Canvas,
         environment: EnvironmentValues,
-        path: [Int],
+        path: inout [Int],
         cache: RenderCache?
     ) {
         // 环境修改必须先于当前节点绘制生效，并继续传给所有子节点。
@@ -51,31 +52,53 @@ package enum Render {
 
         // 将“节点自身 + 后代”作为一个绘制作用域供裁剪节点整体包裹。
         // 若只裁剪节点自身，ScrollView 的子内容仍会泄漏到视口之外。
-        let drawNode = {
-            // 零尺寸节点不应在 frame 起点写入字符，否则会覆盖相邻边框。
-            if let renderable = node as? any _RenderableLayoutNode,
-               renderable.frame.w > 0,
-               renderable.frame.h > 0 {
-                drawRenderable(renderable, to: canvas, environment: resolved, path: path, cache: cache)
-            }
-            if let container = node as? _ContainerLayoutNode {
-                for (index, child) in container.children.enumerated() {
-                    draw(
-                        child,
-                        to: canvas,
-                        environment: resolved,
-                        path: path + [index],
-                        cache: cache
-                    )
-                }
-            }
-        }
-
         if let clipping = node as? _ClippingLayoutNode {
             // Canvas 会把这里的区域与所有祖先裁剪区继续求交。
-            canvas.withClip(clipping.clipRect, drawNode)
+            // The clip closure cannot capture an inout argument. Copying the
+            // short path only at a clipping boundary is still far cheaper than
+            // allocating `path + [index]` for every node in the tree.
+            var clippedPath = path
+            canvas.withClip(clipping.clipRect) {
+                drawContents(
+                    node,
+                    to: canvas,
+                    environment: resolved,
+                    path: &clippedPath,
+                    cache: cache
+                )
+            }
         } else {
-            drawNode()
+            drawContents(node, to: canvas, environment: resolved, path: &path, cache: cache)
+        }
+    }
+
+    private static func drawContents(
+        _ node: any _Layoutable,
+        to canvas: Canvas,
+        environment: EnvironmentValues,
+        path: inout [Int],
+        cache: RenderCache?
+    ) {
+        // 零尺寸节点不应在 frame 起点写入字符，否则会覆盖相邻边框。
+        if let renderable = node as? any _RenderableLayoutNode,
+           renderable.frame.w > 0,
+           renderable.frame.h > 0,
+           canvas.intersectsCurrentClip(renderable.frame) {
+            drawRenderable(renderable, to: canvas, environment: environment, path: path, cache: cache)
+        }
+        // 递归绘制子节点。ContainerLayoutable 负责暴露 children。
+        if let container = node as? any _ContainerLayoutable {
+            for (index, child) in container.children.enumerated() {
+                path.append(index)
+                draw(
+                    child,
+                    to: canvas,
+                    environment: environment,
+                    path: &path,
+                    cache: cache
+                )
+                path.removeLast()
+            }
         }
     }
 
@@ -107,7 +130,7 @@ package enum Render {
         // 身份 key 表示“同一棵布局树里同路径同类型的节点”。fingerprint 表示这个
         // 节点本帧会画成什么样。两者分开统计，方便确认缓存判断本身是否变成瓶颈。
         let key = cache.measure(\.identityNanoseconds) {
-            RenderCache.Key(path: path, typeName: String(reflecting: type(of: renderable)))
+            RenderCache.Key(path: path, typeID: ObjectIdentifier(type(of: renderable)))
         }
         let fingerprint = cache.measure(\.fingerprintNanoseconds) {
             reusable.renderFingerprint(environment: environment)

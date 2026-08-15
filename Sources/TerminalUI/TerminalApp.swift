@@ -2,14 +2,15 @@ import Foundation
 import TerminalUIFoundation
 import TerminalUILayout
 import TerminalUIRender
+import WttchCombine
 
-/// A one-way View → LayoutNode → Render → Canvas host.
-public final class TerminalApp {
+/// A one-way View → _Layoutable → Render → Canvas host.
+public final class _TerminalAppHost {
     private var width: Int
     private var height: Int
     private let root: any View
     private var signalHandler: ((TerminalSignal) -> Void)?
-    private var renderedRoot: (any _LayoutNode)?
+    private var renderedRoot: (any _Layoutable)?
     private var focusedNodeIndex: Int?
     /// 区分“尚未选择过焦点”和“用户按 Esc 主动清空焦点”。
     private var didInitializeFocus = false
@@ -21,14 +22,14 @@ public final class TerminalApp {
         self.root = ZStack(content)
     }
 
-    /// Observes terminal lifecycle signals on TerminalApp's main event loop.
+    /// Observes terminal lifecycle signals on the host's main event loop.
     ///
     /// The callback runs after the POSIX signal has been converted to a regular
     /// runtime event, so it may update `@State` or post TerminalStateRuntime
-    /// actions. TerminalApp still performs mandatory terminal cleanup, suspend,
+    /// actions. _TerminalAppHost still performs mandatory terminal cleanup, suspend,
     /// resume and resize behavior after notifying the callback.
     @discardableResult
-    public func onSignal(_ handler: @escaping (TerminalSignal) -> Void) -> TerminalApp {
+    public func onSignal(_ handler: @escaping (TerminalSignal) -> Void) -> _TerminalAppHost {
         signalHandler = handler
         return self
     }
@@ -44,14 +45,14 @@ public final class TerminalApp {
     private func render(to canvas: Canvas, cache: RenderCache?) {
         let bounds = Rect(x: 0, y: 0, w: width, h: height)
         let node = root._makeLayoutNode()
-        // GeometryReader 这类节点会在 layout 阶段才按最终尺寸展开子树。焦点与
-        // 滚动状态都必须在这之后迁移，否则聊天页这类 GeometryReader 内的
-        // ScrollView 会在焦点遍历时不可见，表现成 Tab 怎么也进不去。
-        restoreTabSelection(from: renderedRoot, to: node)
+        // Restore statically available state first. In particular, an
+        // uncontrolled TabView must select the old page before layout.
+        LayoutReconciler.reconcile(from: renderedRoot, to: node)
         node.layout(in: bounds)
-        restoreInteractionState(from: renderedRoot, to: node)
+        // GeometryReader creates descendants during layout. Reconcile once more
+        // to reach those nodes; ScrollView reapplies its own offset locally.
+        LayoutReconciler.reconcile(from: renderedRoot, to: node)
         synchronizeFocus(in: node)
-        node.layout(in: bounds)
         Render.drawLaidOut(node, to: canvas, cache: cache)
         renderedRoot = node
     }
@@ -104,28 +105,35 @@ public final class TerminalApp {
 
     /// 进入终端事件循环，监听按键并在状态变化后重绘。
     ///
-    /// 使用 POSIX termios，不依赖 Combine；支持 macOS 与 Linux 终端。
+    /// 不依赖 Combine；输入、信号、尺寸与输出准备统一收敛在 `_TerminalPlatform`，
+    /// 同时支持 Windows 控制台与 macOS / Linux 终端。
     public func run(clearScreen: Bool = true) throws {
-        let input = _TerminalInput()
-        try input.start()
+        let platform = _TerminalPlatform()
+        try platform.startInput()
         // 终端颜色能力在一次运行期间保持不变。ProcessInfo.environment 的构造
         // 成本很高，不能在每次按键重绘时通过 `.current` 重复检测。
         let colorSupport = TerminalColorSupport.current
-
         let events = _TerminalAppEventQueue()
-        let signals = _TerminalSignalCoordinator()
         TerminalStateRuntime.setEventHandler { events.push(.state($0)) }
-        signals.start { events.push(.terminal(.signal($0))) }
+        platform.startSignals { events.push(.terminal(.signal($0))) }
+        // 按键走 Combine:readKey 读到后 send 到全局流,宿主订阅该流再进事件队列,
+        // 让视图层 .onKeyPress 的数据来源就是 key stream,外部客户端也可订阅。
+        let keySubscription = TerminalKeyEvents.stream.sink { events.push(.terminal(.key($0))) }
 
         defer {
+            keySubscription.cancel()
             TerminalStateRuntime.setEventHandler(nil)
-            input.stop()
+            platform.stopInput()
             leaveTerminalScreen(clearScreen: clearScreen)
+            // 在停止输出 ANSI 之后再恢复控制台模式，避免残留转义序列被原样显示。
+            platform.restoreOutput()
             // Restore the embedding process's original signal dispositions only
             // after the terminal is safe for the shell again.
-            signals.stop()
+            platform.stopSignals()
         }
 
+        // 必须先于任何 ANSI 输出开启 VT 处理，否则 Windows conhost 不会渲染颜色。
+        platform.prepareOutput()
         enterTerminalScreen(clearScreen: clearScreen)
 
         var isRunning = true
@@ -134,6 +142,9 @@ public final class TerminalApp {
         // RenderCache 负责复用 View 叶子节点绘制快照。两者分工独立：前者减少
         // 画布分配和终端输出，后者减少重复 draw。
         var canvasBuffer = CanvasDoubleBuffer(width: width, height: height)
+        // Per-node DispatchTime sampling is reserved for explicit benchmarks.
+        // Runtime diagnostics only need cache counters and whole-frame timings;
+        // sampling every cache operation becomes visible overhead on dense pages.
         let renderCache = RenderCache()
 
         while isRunning {
@@ -143,14 +154,37 @@ public final class TerminalApp {
                     // 可能触发滚屏，导致最后一行状态栏被卷到画面顶部。
                     // 这里的闭包只负责把当前帧画到 drawing buffer；renderOutput
                     // 会在闭包结束后和上一帧比较，并交换 presented/drawing。
+                    let frameStart = DispatchTime.now().uptimeNanoseconds
+                    var renderNanoseconds: UInt64 = 0
                     let output = canvasBuffer.renderOutput(colorSupport: colorSupport) { canvas in
+                        let renderStart = DispatchTime.now().uptimeNanoseconds
                         render(to: canvas, cache: renderCache)
+                        renderNanoseconds = DispatchTime.now().uptimeNanoseconds - renderStart
                     }
+                    let totalNanoseconds = DispatchTime.now().uptimeNanoseconds - frameStart
+                    TerminalDebugRuntime.recordFrame(
+                        renderNanoseconds: renderNanoseconds,
+                        outputNanoseconds: totalNanoseconds > renderNanoseconds
+                            ? totalNanoseconds - renderNanoseconds
+                            : 0,
+                        totalNanoseconds: totalNanoseconds,
+                        outputBytes: output.utf8.count,
+                        cacheStats: renderCache.stats
+                    )
                     if !output.isEmpty {
                         writeTerminal(output)
                     }
                 } else {
+                    let frameStart = DispatchTime.now().uptimeNanoseconds
                     let canvas = render()
+                    let totalNanoseconds = DispatchTime.now().uptimeNanoseconds - frameStart
+                    TerminalDebugRuntime.recordFrame(
+                        renderNanoseconds: totalNanoseconds,
+                        outputNanoseconds: 0,
+                        totalNanoseconds: totalNanoseconds,
+                        outputBytes: 0,
+                        cacheStats: RenderCacheStats()
+                    )
                     canvas.flush(terminatingLine: false)
                 }
             }
@@ -158,8 +192,9 @@ public final class TerminalApp {
             // 较短轮询周期使后台动画请求能及时进入主循环，同时 poll 在无输入时
             // 仍会休眠，不会产生忙等待。有待刷新的帧时，轮询只睡到下一帧时间点，
             // 让多次状态变化先进入缓冲，再在固定节奏上合并成一次绘制。
-            if let key = try input.readKey(timeoutMilliseconds: renderScheduler.pollTimeoutMilliseconds) {
-                events.push(.terminal(.key(key)))
+            if let key = try platform.readKey(timeoutMilliseconds: renderScheduler.pollTimeoutMilliseconds) {
+                // 按键只发到 Combine 全局流;宿主订阅会把键转进事件队列驱动分发。
+                TerminalKeyEvents.stream.send(key)
             }
 
             while let event = events.pop() {
@@ -193,10 +228,10 @@ public final class TerminalApp {
                         case .suspend:
                             // Shell must regain a cooked, visible terminal while this
                             // process is stopped. raise(SIGTSTP) returns after `fg`.
-                            input.stop()
+                            platform.stopInput()
                             leaveTerminalScreen(clearScreen: clearScreen)
-                            signals.suspendCurrentProcess()
-                            try input.start()
+                            platform.suspendCurrentProcess()
+                            try platform.startInput()
                             enterTerminalScreen(clearScreen: clearScreen)
                             if let size = updateTerminalSize(),
                                dispatch(.resize(size)).requestsRender {
@@ -249,8 +284,8 @@ public final class TerminalApp {
         return dispatch(event, to: node)
     }
 
-    private func dispatch(_ event: TerminalEvent, to node: any _LayoutNode) -> TerminalEventResult {
-        if let container = node as? _ContainerLayoutNode {
+    private func dispatch(_ event: TerminalEvent, to node: any _Layoutable) -> TerminalEventResult {
+        if let container = node as? any _ContainerLayoutable {
             for child in container.children.reversed() {
                 let result = dispatch(event, to: child)
                 if result.consumesEvent {
@@ -265,7 +300,7 @@ public final class TerminalApp {
         return .ignored
     }
 
-    private func synchronizeFocus(in root: any _LayoutNode) {
+    private func synchronizeFocus(in root: any _Layoutable) {
         let modalFocusScopeActive = containsActiveModalFocusScope(in: root)
         if modalFocusScopeActive != isModalFocusScopeActive {
             focusedNodeIndex = nil
@@ -277,6 +312,13 @@ public final class TerminalApp {
         guard !nodes.isEmpty else {
             focusedNodeIndex = nil
             return
+        }
+
+        // Reconciliation may move the previously focused node to a new structural
+        // index after a ForEach reorder. Adopt that index before applying the
+        // ordinary focus rules below.
+        if let restoredIndex = nodes.firstIndex(where: \.isFocused) {
+            focusedNodeIndex = restoredIndex
         }
 
         let boundIndices = nodes.indices.filter {
@@ -308,15 +350,15 @@ public final class TerminalApp {
         }
     }
 
-    private func containsActiveModalFocusScope(in node: any _LayoutNode) -> Bool {
+    private func containsActiveModalFocusScope(in node: any _Layoutable) -> Bool {
         if (node as? any _ModalFocusScopeLayoutNode)?.isModalFocusScopeActive == true {
             return true
         }
-        guard let container = node as? _ContainerLayoutNode else { return false }
+        guard let container = node as? any _ContainerLayoutable else { return false }
         return container.children.contains(where: containsActiveModalFocusScope)
     }
 
-    private func moveFocus(in root: any _LayoutNode, backwards: Bool) -> KeyPress.Result {
+    private func moveFocus(in root: any _Layoutable, backwards: Bool) -> KeyPress.Result {
         let nodes = focusableNodes(in: root)
         guard !nodes.isEmpty else { return .ignored }
         let next: Int
@@ -339,8 +381,8 @@ public final class TerminalApp {
     }
 
     private func restoreInteractionState(
-        from previousRoot: (any _LayoutNode)?,
-        to currentRoot: any _LayoutNode
+        from previousRoot: (any _Layoutable)?,
+        to currentRoot: any _Layoutable
     ) {
         guard let previousRoot else { return }
         let previous = focusTargetNodes(in: previousRoot)
@@ -353,8 +395,8 @@ public final class TerminalApp {
     }
 
     private func restoreTabSelection(
-        from previousRoot: (any _LayoutNode)?,
-        to currentRoot: any _LayoutNode
+        from previousRoot: (any _Layoutable)?,
+        to currentRoot: any _Layoutable
     ) {
         guard let previousRoot else { return }
         for (old, new) in zip(tabSelectionNodes(in: previousRoot), tabSelectionNodes(in: currentRoot)) {
@@ -362,10 +404,10 @@ public final class TerminalApp {
         }
     }
 
-    private func tabSelectionNodes(in node: any _LayoutNode) -> [any _TabSelectionNode] {
+    private func tabSelectionNodes(in node: any _Layoutable) -> [any _TabSelectionNode] {
         var result: [any _TabSelectionNode] = []
         if let tab = node as? any _TabSelectionNode { result.append(tab) }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             for child in container.children {
                 result.append(contentsOf: tabSelectionNodes(in: child))
             }
@@ -373,10 +415,10 @@ public final class TerminalApp {
         return result
     }
 
-    private func tabNavigationNodes(in node: any _LayoutNode) -> [any _TabNavigationNode] {
+    private func tabNavigationNodes(in node: any _Layoutable) -> [any _TabNavigationNode] {
         var result: [any _TabNavigationNode] = []
         if let tab = node as? any _TabNavigationNode { result.append(tab) }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
                 ?? container.children
             for child in children {
@@ -386,7 +428,7 @@ public final class TerminalApp {
         return result
     }
 
-    private func focusableNodes(in node: any _LayoutNode) -> [any _FocusableLayoutNode] {
+    private func focusableNodes(in node: any _Layoutable) -> [any _FocusableLayoutNode] {
         // 使用与布局树声明顺序一致的前序遍历，确保 Tab 顺序稳定且可预测。
         // FocusState 包装节点是焦点边界，其内部 TextField 不重复加入列表。
         if let binding = node as? any _FocusBindingLayoutNode {
@@ -396,7 +438,7 @@ public final class TerminalApp {
         if let focusable = node as? any _FocusableLayoutNode {
             result.append(focusable)
         }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
                 ?? container.children
             for child in children {
@@ -406,7 +448,7 @@ public final class TerminalApp {
         return result
     }
 
-    private func focusTargetNodes(in node: any _LayoutNode) -> [any _FocusTargetLayoutNode] {
+    private func focusTargetNodes(in node: any _Layoutable) -> [any _FocusTargetLayoutNode] {
         // FocusState 包装节点是交互状态边界；恢复它即可由包装节点转发给内部目标，
         // 不再继续递归，避免同一个 TextField 被恢复两次。
         if let binding = node as? any _FocusBindingLayoutNode {
@@ -416,7 +458,7 @@ public final class TerminalApp {
         if let focusTarget = node as? any _FocusTargetLayoutNode {
             result.append(focusTarget)
         }
-        if let container = node as? _ContainerLayoutNode {
+        if let container = node as? any _ContainerLayoutable {
             let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
                 ?? container.children
             for child in children {
@@ -523,6 +565,40 @@ private extension TerminalEventResult {
         switch self {
         case .requestRender: true
         case .handled, .ignored: false
+        }
+    }
+}
+
+// MARK: - TerminalApp Protocol Extension
+
+extension TerminalApp {
+    /// 自动检测终端尺寸、构造宿主并启动事件循环。
+    ///
+    /// 类似于 SwiftUI `@main` 的默认 `main()` 实现：
+    /// ```swift
+    /// @main
+    /// struct MyApp: TerminalApp {
+    ///     var body: some View {
+    ///         Text("Hello")
+    ///     }
+    /// }
+    /// ```
+    //
+    /// 非 TTY 环境（如 Xcode 控制台或管道）下会回退到单帧渲染并 flush 输出。
+    public static func main() {
+        let size = TerminalSizeReader.current(
+            or: TerminalSize(columns: 108, rows: 32)
+        )
+        let host = _TerminalAppHost(width: size.width, height: size.height) {
+            Self().body
+        }
+
+        do {
+            try host.run()
+        } catch TerminalInputError.notTerminal {
+            host.render().flush()
+        } catch {
+            print("终端输入失败：\(error)")
         }
     }
 }

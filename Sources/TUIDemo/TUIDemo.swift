@@ -2,20 +2,16 @@ import Foundation
 import TerminalUI
 
 @main
-struct ShengjiCmd {
-    static func main() {
-        let size = TerminalSizeReader.current(or: TerminalSize(columns: 108, rows: 32))
-        let app = TerminalApp(width: size.width, height: size.height) {
-            ObservatoryDemo(isWide: size.width >= 96)
-        }
+struct TUIDemo: TerminalApp {
+    let isWide: Bool
 
-        do {
-            try app.run()
-        } catch TerminalInputError.notTerminal {
-            app.render().flush()
-        } catch {
-            print("终端输入失败：\(error)")
-        }
+    init() {
+        let size = TerminalSizeReader.current(or: TerminalSize(columns: 108, rows: 32))
+        isWide = size.width >= 96
+    }
+
+    var body: some View {
+        ObservatoryDemo(isWide: isWide)
     }
 }
 
@@ -93,6 +89,7 @@ private struct ObservatoryDemo: View {
     @State private var showsSheet = false
     @State private var showsAIConfigSheet = false
     @State private var showsMarkdownSheet = false
+    @State private var showsDebugMetricsToast = false
     @State private var showsToast = false
     @State private var activeConversationID = 0
     @State private var selectedMessageKeys: Set<SelectedMessageKey> = [
@@ -227,55 +224,59 @@ private struct ObservatoryDemo: View {
     ]
 
     var body: some View {
-        ZStack {
-            Spacer()
-                .backgroundColor(.rgb(8, 13, 24))
+        DebugMetricsReader { metrics in
+            ZStack {
+                Spacer()
+                    .backgroundColor(.rgb(8, 13, 24))
 
-            TabView(selection: tabSelection) {
-                overviewPage
-                    .tabItem { Text("◇ 概览") }
-                    .tag(ObservatoryTab.overview)
+                TabView(selection: tabSelection) {
+                    overviewPage
+                        .tabItem { Text("◇ 概览") }
+                        .tag(ObservatoryTab.overview)
+                    activityPage
+                        .tabItem { Text("≋ 动态") }
+                        .tag(ObservatoryTab.activity)
 
-                activityPage
-                    .tabItem { Text("≋ 动态") }
-                    .tag(ObservatoryTab.activity)
+                    settingsPage
+                        .tabItem { Text("⚙ 设置") }
+                        .tag(ObservatoryTab.settings)
 
-                settingsPage
-                    .tabItem { Text("⚙ 设置") }
-                    .tag(ObservatoryTab.settings)
-
-                chatPage
-                    .tabItem { Text("◈ 智能对话") }
-                    .tag(ObservatoryTab.chat)
+                    chatPage
+                        .tabItem { Text("◈ 智能对话") }
+                        .tag(ObservatoryTab.chat)
+                }
+                .foregroundColor(.rgb(203, 213, 225))
             }
-            .foregroundColor(.rgb(203, 213, 225))
-        }
-        .onKeyPress { event in
-            handleGlobalKey(event)
-        }
-        .sheet(isPresented: $showsSheet, alignment: .center) {
-            VStack(alignment: .center) {
-                Text("九宫格弹出框")
-                    .foregroundColor(.brightWhite)
-                    .bold()
-                Spacer(height: 1)
-                Text("当前位于屏幕中央")
-                    .foregroundColor(.brightCyan)
-                Text("同一接口支持九个对齐方向")
-                    .foregroundColor(.rgb(148, 163, 184))
-                Spacer(height: 1)
-                Text("按退出键关闭")
-                    .foregroundColor(.brightYellow)
+            .onKeyPress { event in
+                handleGlobalKey(event)
             }
-        }
-        .sheet(isPresented: $showsAIConfigSheet, alignment: .center) {
-            aiConfigSheet
-        }
-        .sheet(isPresented: $showsMarkdownSheet, alignment: .center) {
-            markdownDraftSheet
-        }
-        .toast(isPresented: $showsToast, alignment: .topTrailing) {
-            Text("✓ 快照已刷新 #\(refreshCount)")
+            .sheet(isPresented: $showsSheet, alignment: .center) {
+                VStack(alignment: .center) {
+                    Text("九宫格弹出框")
+                        .foregroundColor(.brightWhite)
+                        .bold()
+                    Spacer(height: 1)
+                    Text("当前位于屏幕中央")
+                        .foregroundColor(.brightCyan)
+                    Text("同一接口支持九个对齐方向")
+                        .foregroundColor(.rgb(148, 163, 184))
+                    Spacer(height: 1)
+                    Text("按退出键关闭")
+                        .foregroundColor(.brightYellow)
+                }
+            }
+            .sheet(isPresented: $showsAIConfigSheet, alignment: .center) {
+                aiConfigSheet
+            }
+            .sheet(isPresented: $showsMarkdownSheet, alignment: .center) {
+                markdownDraftSheet
+            }
+            .toast(isPresented: $showsToast, alignment: .topTrailing) {
+                Text("✓ 快照已刷新 #\(refreshCount)")
+            }
+            .toast(isPresented: $showsDebugMetricsToast, alignment: .bottomTrailing) {
+                debugMetricsToast(metrics)
+            }
         }
     }
 
@@ -330,7 +331,7 @@ private struct ObservatoryDemo: View {
                 }
                 .foregroundColor(liveUpdates ? .brightGreen : .rgb(71, 85, 105))
                 Spacer()
-                statusBar(hint: "R 刷新提示 · S 弹出框 · 空格 暂停/继续")
+                statusBar(hint: "R 刷新提示 · S 弹出框 · D 调试指标 · 空格 暂停/继续")
             }
         }
     }
@@ -403,7 +404,7 @@ private struct ObservatoryDemo: View {
                 .foregroundColor(.rgb(71, 85, 105))
             }
             Spacer()
-            statusBar(hint: "R 获取最新快照")
+            statusBar(hint: "R 获取最新快照 · D 调试指标")
         }
     }
 
@@ -467,7 +468,7 @@ private struct ObservatoryDemo: View {
             }
             .foregroundColor(.brightCyan)
             Spacer()
-            statusBar(hint: "1–3 切换 · 回车保存 · 退出键离开输入框")
+            statusBar(hint: "1–3 切换 · D 调试指标 · 回车保存")
         }
     }
 
@@ -476,6 +477,7 @@ private struct ObservatoryDemo: View {
             let historyWidth = isWide ? 34 : 0
             let gapWidth = isWide ? 2 : 0
             let conversationWidth = max(32, geometry.size.w - historyWidth - gapWidth)
+            let messageBubbleWidth = max(20, Int(Double(conversationWidth) * 0.6))
             let messageHeight = max(8, geometry.size.h - 10)
             let historyHeight = max(8, geometry.size.h - 8)
 
@@ -487,11 +489,13 @@ private struct ObservatoryDemo: View {
                     if isWide {
                         GroupBox("历史对话", style: .rounded) {
                             ScrollView(.vertical) {
-                                VStack(alignment: .leading) {
-                                    ForEach(conversations) { conversation in
-                                        conversationRow(conversation)
-                                        Spacer(height: 1)
-                                    }
+                                LazyVStack(
+                                    conversations,
+                                    alignment: .leading,
+                                    spacing: 1,
+                                    estimatedRowHeight: 3
+                                ) { conversation in
+                                    conversationRow(conversation)
                                 }
                             }
                             .frame(height: historyHeight)
@@ -507,16 +511,19 @@ private struct ObservatoryDemo: View {
                     VStack {
                         GroupBox(currentConversationTitle, style: .rounded) {
                             ScrollView(.vertical) {
-                                VStack(alignment: .leading) {
-                                    ForEach(currentMessages) { message in
-                                        SelectableChatMessageView(
-                                            message: message,
-                                            index: messageSelectionNumber(for: message),
-                                            isSelecting: isSelectingMessages,
-                                            isSelected: isMessageSelected(message)
-                                        )
-                                        Spacer(height: 1)
-                                    }
+                                LazyVStack(
+                                    currentMessages,
+                                    alignment: .leading,
+                                    spacing: 1,
+                                    estimatedRowHeight: 5
+                                ) { message in
+                                    SelectableChatMessageView(
+                                        message: message,
+                                        index: messageSelectionNumber(for: message),
+                                        isSelecting: isSelectingMessages,
+                                        isSelected: isMessageSelected(message),
+                                        bubbleWidth: messageBubbleWidth
+                                    )
                                 }
                             }
                             .frame(height: messageHeight)
@@ -616,6 +623,32 @@ private struct ObservatoryDemo: View {
                 .foregroundColor(.rgb(100, 116, 139))
         }
         .frame(width: 86)
+    }
+
+    private func debugMetricsToast(_ metrics: TerminalDebugMetrics) -> some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text("Debug Reader")
+                    .foregroundColor(.black)
+                    .bold()
+                Spacer()
+                Text(metrics.frameCount == 0 ? "等待" : "#\(metrics.frameCount)")
+                    .foregroundColor(.black)
+            }
+            Spacer(height: 1)
+            debugMetricRow("节点", "\(metrics.cache.totalRenderableNodes)")
+            debugMetricRow("复用", "\(metrics.cache.reusedNodes)/\(metrics.cache.reusableNodes)")
+            debugMetricRow("脏节点", "\(metrics.cache.dirtyReusableNodes)")
+            debugMetricRow("渲染", formatDuration(metrics.renderNanoseconds))
+            debugMetricRow("输出", formatDuration(metrics.outputNanoseconds))
+            debugMetricRow("速度", formatFPS(metrics.framesPerSecond))
+            debugMetricRow("平均", formatFPS(metrics.averageFramesPerSecond))
+            debugMetricRow("字节", "\(metrics.outputBytes)")
+            Spacer(height: 1)
+            Text("D 隐藏 · 上一帧快照")
+                .foregroundColor(.black)
+        }
+        .frame(width: 34)
     }
 
     private var currentConversationTitle: String {
@@ -720,6 +753,17 @@ private struct ObservatoryDemo: View {
             Spacer(width: 2)
             content().foregroundColor(.brightWhite)
             Spacer()
+        }
+    }
+
+    private func debugMetricRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundColor(.black)
+            Spacer()
+            Text(value)
+                .foregroundColor(.black)
+                .bold()
         }
     }
 
@@ -897,6 +941,21 @@ private struct ObservatoryDemo: View {
         }
     }
 
+    private func formatDuration(_ nanoseconds: UInt64) -> String {
+        if nanoseconds >= 1_000_000 {
+            return String(format: "%.2f 毫秒", Double(nanoseconds) / 1_000_000)
+        }
+        if nanoseconds >= 1_000 {
+            return String(format: "%.2f 微秒", Double(nanoseconds) / 1_000)
+        }
+        return "\(nanoseconds) 纳秒"
+    }
+
+    private func formatFPS(_ framesPerSecond: Double) -> String {
+        guard framesPerSecond.isFinite, framesPerSecond > 0 else { return "0.0 帧/秒" }
+        return String(format: "%.1f 帧/秒", framesPerSecond)
+    }
+
     private func handleGlobalKey(_ event: KeyPress) -> KeyPress.Result {
         switch event.key {
         case .character("q"):
@@ -908,6 +967,8 @@ private struct ObservatoryDemo: View {
             showsToast.toggle()
         case .character("s"):
             showsSheet = true
+        case .character("d"):
+            showsDebugMetricsToast.toggle()
         case .character("a"):
             showsAIConfigSheet = true
         case .character("x"):
@@ -949,22 +1010,34 @@ private struct SelectableChatMessageView: View {
     let index: Int?
     let isSelecting: Bool
     let isSelected: Bool
+    let bubbleWidth: Int
 
     var body: some View {
-        GroupBox(
-            title,
-            titleAlignment: .leading,
-            style: .rounded
-        ) {
-            Text(message.content)
-                .foregroundColor(.rgb(203, 213, 225))
-            HStack {
+        HStack {
+            if message.role == .user {
                 Spacer()
-                Text(message.timestamp)
-                    .foregroundColor(.rgb(100, 116, 139))
+            }
+
+            GroupBox(
+                title,
+                titleAlignment: message.role == .user ? .trailing : .leading,
+                style: .rounded
+            ) {
+                Text(message.content)
+                    .foregroundColor(.rgb(203, 213, 225))
+                HStack {
+                    Spacer()
+                    Text(message.timestamp)
+                        .foregroundColor(.rgb(100, 116, 139))
+                }
+            }
+            .frame(width: bubbleWidth)
+            .foregroundColor(message.role == .assistant ? .brightCyan : .brightYellow)
+
+            if message.role == .assistant {
+                Spacer()
             }
         }
-        .foregroundColor(message.role == .assistant ? .brightCyan : .brightYellow)
     }
 
     private var title: String {

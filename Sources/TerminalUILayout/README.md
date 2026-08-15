@@ -54,6 +54,7 @@ func layout(in rect: Rect)
 ## 重要实现
 
 - Stack：测量子节点，分配固定空间与 Spacer 剩余空间，并按 alignment 定位。
+- LazyVStack：与纵向 ScrollView 协作，只生成视口附近的行，并按稳定 ID 跨帧恢复行高缓存。
 - Text：按 cell 宽度换行，尊重显式换行和 lineLimit，空间不足时添加省略号。
 - TextField：维护 grapheme 级光标和水平视口，焦点时在当前插入位置显示细竖条光标。
 - ScrollView：分别维护内容尺寸、视口、滚动上限和偏移，并提供裁剪区域。

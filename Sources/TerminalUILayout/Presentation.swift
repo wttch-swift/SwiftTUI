@@ -5,8 +5,8 @@
 /// the sheet does not handle are blocked from reaching the underlying content;
 /// Escape dismisses the sheet.
 extension _PresentationView: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
-        let contentNode: (any _LayoutNode)?
+    package func _makeLayoutNode() -> any _Layoutable {
+        let contentNode: (any _Layoutable)?
         if isPresented.wrappedValue {
             let node = presented._makeLayoutNode()
             contentNode = switch style {
@@ -33,8 +33,14 @@ extension _PresentationView: _LayoutNodeProducing {
 /// Sheet chrome owns its space explicitly: one border cell and one padding cell
 /// on every side. This avoids relying on `.bordered`, whose contract is to use
 /// an already allocated area rather than enlarge the view.
-private final class _SheetSurfaceNode: _UnaryLayoutNode, _RenderableLayoutNode {
-    package override func measure(proposed: ProposedSize) -> Size {
+private final class _SheetSurfaceNode: _LayoutContainerStorage, _UnaryLayoutable, _RenderableLayoutNode {
+    private(set) var frame: Rect = .zero
+
+    init(child: any _Layoutable) {
+        super.init(children: [child])
+    }
+
+    package func measure(proposed: ProposedSize) -> Size {
         let content = child.measure(
             proposed: ProposedSize(
                 width: proposed.width.map { max(0, $0 - 4) },
@@ -44,7 +50,7 @@ private final class _SheetSurfaceNode: _UnaryLayoutNode, _RenderableLayoutNode {
         return Size(w: content.w + 4, h: content.h + 4)
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         frame = rect
         child.layout(
             in: Rect(
@@ -67,17 +73,19 @@ private final class _SheetSurfaceNode: _UnaryLayoutNode, _RenderableLayoutNode {
     }
 }
 
-private final class _ToastSurfaceNode: _UnaryLayoutNode, _RenderableLayoutNode {
-    override init(child: any _LayoutNode) {
-        let styled = _EnvironmentNode(child: child) { environment in
+private final class _ToastSurfaceNode: _LayoutContainerStorage, _UnaryLayoutable, _RenderableLayoutNode {
+    private(set) var frame: Rect = .zero
+
+    init(child: any _Layoutable) {
+        let styled = _makeEnvironmentLayoutNode(child: child) { environment in
             environment.foregroundColor = .black
             environment.backgroundColor = .brightCyan
             environment._isBold = true
         }
-        super.init(child: styled)
+        super.init(children: [styled])
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         let content = child.measure(
             proposed: ProposedSize(
                 width: proposed.width.map { max(0, $0 - 2) },
@@ -87,7 +95,7 @@ private final class _ToastSurfaceNode: _UnaryLayoutNode, _RenderableLayoutNode {
         return Size(w: content.w + 2, h: content.h)
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         frame = rect
         child.layout(
             in: Rect(x: rect.x + 1, y: rect.y, w: max(0, rect.w - 2), h: rect.h)
@@ -99,15 +107,15 @@ private final class _ToastSurfaceNode: _UnaryLayoutNode, _RenderableLayoutNode {
     }
 }
 
-private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLayoutNode,
+private final class _PresentationLayoutNode: _LayoutContainerStorage, _ContainerLayoutable, _FocusScopeLayoutNode,
     _ModalFocusScopeLayoutNode {
-    private let base: any _LayoutNode
-    private let presented: (any _LayoutNode)?
-    private let blocker: _KeyPressNode?
+    private let base: any _Layoutable
+    private let presented: (any _Layoutable)?
+    private let blocker: (any _Layoutable)?
     private let alignment: AlignmentEdge
     private let isModal: Bool
 
-    var focusScopeChildren: [any _LayoutNode] {
+    var focusScopeChildren: [any _Layoutable] {
         if isModal, let presented { return [presented] }
         return children
     }
@@ -117,8 +125,8 @@ private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLa
     }
 
     init(
-        base: any _LayoutNode,
-        presented: (any _LayoutNode)?,
+        base: any _Layoutable,
+        presented: (any _Layoutable)?,
         alignment: AlignmentEdge,
         isModal: Bool,
         dismiss: @escaping () -> Void
@@ -129,7 +137,7 @@ private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLa
         self.isModal = isModal
 
         if presented != nil, isModal {
-            blocker = _KeyPressNode(child: _ContainerLayoutNode(children: []), keys: nil) { event in
+            blocker = _KeyPressNode(keys: nil) { event in
                 if event.key == .escape { dismiss() }
                 return .handled
             }
@@ -137,18 +145,17 @@ private final class _PresentationLayoutNode: _ContainerLayoutNode, _FocusScopeLa
             blocker = nil
         }
 
-        var children: [any _LayoutNode] = [base]
+        var children: [any _Layoutable] = [base]
         if let blocker { children.append(blocker) }
         if let presented { children.append(presented) }
         super.init(children: children)
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         base.measure(proposed: proposed)
     }
 
-    package override func layout(in rect: Rect) {
-        super.layout(in: rect)
+    package func layout(in rect: Rect) {
         base.layout(in: rect)
         blocker?.layout(in: rect)
 

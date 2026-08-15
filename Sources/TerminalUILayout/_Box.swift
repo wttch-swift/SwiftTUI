@@ -2,7 +2,7 @@
 /// 边框需要框架内部绘制构造 layoutnode。
 /// 使用叶子节点直接绘制边框。
 extension _Box: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _BoxLayoutNode(style: style)
     }
 }
@@ -11,7 +11,7 @@ extension _Box: _LayoutNodeProducing {
 /// 前景内容，而不是只检查自己的布局子树。
 private final class _BoxLayoutNode: _RenderReusableLayoutNode, _FocusEffectSourceLayoutNode {
     let style: BorderStyle
-    var focusEffectSource: (any _LayoutNode)?
+    var focusEffectSource: (any _Layoutable)?
     private(set) var frame: Rect = .zero
 
     init(style: BorderStyle) {

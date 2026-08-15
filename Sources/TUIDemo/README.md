@@ -1,12 +1,12 @@
-# ShengjiCmd 示例
+# TUIDemo 示例
 
-`ShengjiCmd` 是 TerminalUI 的完整交互示例，不是框架内部实现。它只依赖最终
+`TUIDemo` 是 TerminalUI 的完整交互示例，不是框架内部实现。它只依赖最终
 `TerminalUI` product，用来验证真实客户端无需导入 Layout、Render 或 Core。
 
 ## 运行
 
 ```bash
-swift run ShengjiCmd
+swift run TUIDemo
 ```
 
 建议在支持 ANSI 颜色和 UTF-8 的交互终端中运行。程序读取当前终端大小；读取失败

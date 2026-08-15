@@ -4,21 +4,21 @@
             "type": "swift",
             "request": "launch",
             "args": [],
-            "cwd": "${workspaceFolder:ShengjiCmd}",
-            "name": "Debug ShengjiCmd",
-            "target": "ShengjiCmd",
+            "cwd": "${workspaceFolder:SwiftTUI}",
+            "name": "Debug TUIDemo",
+            "target": "TUIDemo",
             "configuration": "debug",
-            "preLaunchTask": "swift: Build Debug ShengjiCmd"
+            "preLaunchTask": "swift: Build Debug TUIDemo"
         },
         {
             "type": "swift",
             "request": "launch",
             "args": [],
-            "cwd": "${workspaceFolder:ShengjiCmd}",
-            "name": "Release ShengjiCmd",
-            "target": "ShengjiCmd",
+            "cwd": "${workspaceFolder:SwiftTUI}",
+            "name": "Release TUIDemo",
+            "target": "TUIDemo",
             "configuration": "release",
-            "preLaunchTask": "swift: Build Release ShengjiCmd"
+            "preLaunchTask": "swift: Build Release TUIDemo"
         }
     ]
 }

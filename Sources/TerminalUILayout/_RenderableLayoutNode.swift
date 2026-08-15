@@ -1,6 +1,6 @@
 
 /// 可以渲染的布局节点。
-package protocol _RenderableLayoutNode: _LayoutNode {
+package protocol _RenderableLayoutNode: _Layoutable {
     /// 布局节点的矩形区域。
     var frame: Rect { get }
 

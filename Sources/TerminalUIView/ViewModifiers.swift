@@ -1,4 +1,10 @@
 public extension View {
+    /// Assigns stable identity to this view for cross-frame reconciliation.
+    /// Like SwiftUI's `id(_:)`, changing the value denotes a different node.
+    func id<ID: Hashable>(_ id: ID) -> some View {
+        _IdentityView(content: self, id: AnyHashable(id))
+    }
+
     /// 在视图现有布局区域内绘制边框，并把子视图向内压缩一格。
     /// - Parameters:
     ///   - color: 边框前景色。
@@ -25,6 +31,11 @@ public extension View {
     func frame(width: Int? = nil, height: Int? = nil, alignment: AlignmentEdge = .topLeading) -> some View {
         modifier(_FrameModifier(width: width, height: height, alignment: alignment))
     }
+}
+
+package struct _IdentityView<Content: View>: View, _NeverView {
+    package let content: Content
+    package let id: AnyHashable
 }
 
 package struct _Background<Content: View, Background: View>: View, _NeverView {

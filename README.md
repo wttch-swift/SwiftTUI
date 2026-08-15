@@ -1,10 +1,14 @@
-# ShengjiCmd / TerminalUI
+# TUIDemo / TerminalUI
+
+[![Build (Ubuntu)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/ubuntu.yml)
+[![Build (macOS)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/macos.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/macos.yml)
+[![Build (Windows)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/windows.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/windows.yml)
 
 TerminalUI 是一个使用 Swift 编写的声明式终端 UI 实验框架。它借鉴 SwiftUI 的
 `View`、`ViewBuilder`、`State`、`Binding`、`FocusState` 和 modifier 组合方式，
 但最终把界面布局到终端字符单元格，并通过 ANSI 控制序列增量输出。
 
-仓库同时包含 `ShengjiCmd` 示例程序，用一个可交互的观测站界面展示布局、表格、
+仓库同时包含 `TUIDemo` 示例程序，用一个可交互的观测站界面展示布局、表格、
 滚动、输入框、焦点、标签页、弹层和文本动画。
 
 ## 设计目标
@@ -20,12 +24,13 @@ TerminalUI 是一个使用 Swift 编写的声明式终端 UI 实验框架。它�
 ```mermaid
 flowchart TD
     Foundation[TerminalUIFoundation\n值类型与字符宽度]
+    Combine[WttchCombine\n最小 Combine 反应式库]
     Core[TerminalUICore\nCanvas 与 Cell]
     View[TerminalUIView\n声明式 View API]
     Layout[TerminalUILayout\nView 适配与布局树]
     Render[TerminalUIRender\n渲染遍历]
     Facade[TerminalUI\n公共门面与 TerminalApp]
-    Demo[ShengjiCmd\n示例程序]
+    Demo[TUIDemo\n示例程序]
 
     Foundation --> Core
     Foundation --> View
@@ -36,6 +41,7 @@ flowchart TD
     Core --> Render
     View --> Render
     Layout --> Render
+    Combine --> Facade
     Foundation --> Facade
     Core --> Facade
     View --> Facade
@@ -45,8 +51,8 @@ flowchart TD
 ```
 
 图中 `A --> B` 表示 **B 直接依赖 A**，也就是依赖从底层流向上层，源码导入方向
-与箭头相反。`TerminalUIFoundation` 是唯一没有内部依赖的基础 target；客户端入口
-位于最上层的 `TerminalUI`。
+与箭头相反。`TerminalUIFoundation` 与 `WttchCombine` 是没有内部依赖的叶子 target；
+客户端入口位于最上层的 `TerminalUI`。
 
 ## Package 依赖关系
 
@@ -55,13 +61,14 @@ flowchart TD
 | Target | 直接依赖 | 类型与可见性 |
 | --- | --- | --- |
 | `TerminalUIFoundation` | 无 | 基础 target，不单独发布 product |
+| `WttchCombine` | 无 | 最小 Combine 反应式库，由 `TerminalUI` 使用 |
 | `TerminalUICore` | `TerminalUIFoundation` | package 内部渲染基础设施 |
 | `TerminalUIView` | `TerminalUIFoundation` | 公共声明 API，由 `TerminalUI` 重新导出 |
 | `TerminalUILayout` | `TerminalUIFoundation`、`TerminalUICore`、`TerminalUIView` | package 内部布局实现 |
 | `TerminalUIRender` | `TerminalUIFoundation`、`TerminalUICore`、`TerminalUIView`、`TerminalUILayout` | package 内部渲染协调器 |
 | `TerminalUI` | Foundation、Core、View、Layout、Render 五个 target | 唯一 library product |
-| `ShengjiCmd` | `TerminalUI` | 示例 executable target |
-| `ShengjiCmdTests` | `TerminalUI`、Core、View、Layout、Render | package 内部测试 target |
+| `TUIDemo` | `TerminalUI` | 示例 executable target |
+| `TUIDemoTests` | `TerminalUI`、Core、View、Layout、Render | package 内部测试 target |
 
 这里刻意让 `TerminalUIView` 和 `TerminalUICore` 保持平级：View 声明不会接触 Canvas，
 Core 也不会导入 View。二者第一次汇合于 `TerminalUILayout`，随后由
@@ -72,6 +79,7 @@ Core 也不会导入 View。二者第一次汇合于 `TerminalUILayout`，随后
 维护依赖时应遵循以下约束：
 
 - Foundation 不得依赖其他 TerminalUI target。
+- WttchCombine 是无依赖叶子，不反向依赖任何 TerminalUI target。
 - Core 与 View 不得互相依赖。
 - Layout 可以依赖 Foundation、Core 和 View，但不得依赖 Render 或 TerminalUI。
 - Render 可以依赖下层实现，但不得反向依赖 TerminalUI 宿主。
@@ -103,7 +111,7 @@ View 声明
 | [TerminalUILayout](Sources/TerminalUILayout/README.md) | View 到 LayoutNode 的适配和布局算法 | 否，package 内部实现 |
 | [TerminalUIRender](Sources/TerminalUIRender/README.md) | 环境传播、裁剪和绘制遍历 | 否，package 内部实现 |
 | [TerminalUI](Sources/TerminalUI/README.md) | 最终公共入口、终端尺寸和事件循环 | 是 |
-| [ShengjiCmd](Sources/ShengjiCmd/README.md) | 完整交互示例 | 可作为用法参考 |
+| [TUIDemo](Sources/TUIDemo/README.md) | 完整交互示例 | 可作为用法参考 |
 
 Swift Package 当前只发布一个 library product：`TerminalUI`。其他 target 用来建立
 编译边界；内部关键类型使用 `package` 或默认访问级别，即使模块随依赖被构建，
@@ -114,14 +122,14 @@ Swift Package 当前只发布一个 library product：`TerminalUI`。其他 targ
 在另一个 Swift Package 中添加本仓库依赖，并只依赖 `TerminalUI` product：
 
 ```swift
-.package(path: "../ShengjiCmd")
+.package(path: "../TUIDemo")
 ```
 
 ```swift
 .executableTarget(
     name: "Example",
     dependencies: [
-        .product(name: "TerminalUI", package: "ShengjiCmd")
+        .product(name: "TerminalUI", package: "TUIDemo")
     ]
 )
 ```
@@ -180,13 +188,15 @@ try app.run()
   `ProgressBar` 和 `AnimatedText`。
 - 运行时：终端尺寸读取、按键解码、16 ms 事件轮询、信号/挂起恢复、
   状态触发重绘和差异输出。
+- 反应式：WttchCombine 最小 Publisher/Subject 与按键全局流
+  `TerminalKeyEvents.stream`，视图 `.onKeyPress` 的底层数据来源即该流。
 
 ## 开发与测试
 
 ```bash
 swift build
 swift test
-swift run ShengjiCmd
+swift run TUIDemo
 ```
 
 当前测试覆盖布局约束、宽字符、Canvas 输出、颜色降级、焦点、输入框、滚动、

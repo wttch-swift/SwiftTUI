@@ -4,7 +4,7 @@
 /// with `.tag(_:)` for controlled selection, and `.tabItem {}` to supply each
 /// tab's label. In a terminal, the left and right arrow keys change tabs.
 extension TabView: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         let pages = content._makeLayoutNodes().enumerated().map { index, node in
             let metadata = _tabMetadata(in: node)
             return _TabPage(
@@ -30,7 +30,7 @@ extension TabView: _LayoutNodeProducing {
 }
 
 extension _TabMetadataContent: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _TabMetadataNode(
             child: content._makeLayoutNode(),
             tag: tag,
@@ -39,51 +39,42 @@ extension _TabMetadataContent: _LayoutNodeProducing {
     }
 }
 
-private final class _TabMetadataNode: _UnaryLayoutNode {
+private final class _TabMetadataNode: _LayoutContainerStorage, _PassthroughUnaryLayoutable {
     let tag: AnyHashable?
-    let label: (any _LayoutNode)?
+    let label: (any _Layoutable)?
 
-    init(child: any _LayoutNode, tag: AnyHashable?, label: (any _LayoutNode)?) {
+    init(child: any _Layoutable, tag: AnyHashable?, label: (any _Layoutable)?) {
         self.tag = tag
         self.label = label
-        super.init(child: child)
-    }
-
-    package override func measure(proposed: ProposedSize) -> Size {
-        child.measure(proposed: proposed)
-    }
-
-    package override func layout(in rect: Rect) {
-        super.layout(in: rect)
-        child.layout(in: rect)
+        super.init(children: [child])
     }
 }
 
 private struct _TabMetadata {
     var tag: AnyHashable?
-    var label: (any _LayoutNode)?
+    var label: (any _Layoutable)?
 }
 
 /// Metadata modifiers can be separated by ordinary unary modifiers, so inspect
 /// the complete wrapper chain instead of requiring `.tag` and `.tabItem` to be
 /// written in a particular order.
-private func _tabMetadata(in root: any _LayoutNode) -> _TabMetadata {
+private func _tabMetadata(in root: any _Layoutable) -> _TabMetadata {
     var metadata = _TabMetadata()
-    var node: any _LayoutNode = root
+    var node: any _Layoutable = root
     while true {
         if let value = node as? _TabMetadataNode {
             if metadata.tag == nil { metadata.tag = value.tag }
             if metadata.label == nil { metadata.label = value.label }
         }
-        guard let unary = node as? _UnaryLayoutNode else { break }
+        guard let unary: any _UnaryLayoutable = node as? _UnaryLayoutable else { break }
         node = unary.child
     }
     return metadata
 }
 
 private struct _TabPage {
-    let content: any _LayoutNode
-    let label: any _LayoutNode
+    let content: any _Layoutable
+    let label: any _Layoutable
     let tag: AnyHashable?
 }
 
@@ -100,7 +91,7 @@ package protocol _TabNavigationNode: AnyObject {
     func handleTabNavigation(_ event: KeyPress) -> KeyPress.Result
 }
 
-private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNode,
+private final class _TabViewLayoutNode: _LayoutContainerStorage, _ContainerLayoutable, _FlexibleLayoutNode,
     _TabSelectionNode, _TabNavigationNode {
     private let pages: [_TabPage]
     private var tabBar: _TabBarLayoutNode
@@ -125,7 +116,7 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNod
         super.init(children: [tabBar] + selectedContent)
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         guard !pages.isEmpty else { return .zero }
         let barSize = tabBar.measure(proposed: ProposedSize(width: proposed.width, height: proposed.height))
         let remainingHeight = proposed.height.map { max(0, $0 - barSize.h) }
@@ -139,8 +130,7 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNod
         )
     }
 
-    package override func layout(in rect: Rect) {
-        super.layout(in: rect)
+    package func layout(in rect: Rect) {
         guard !pages.isEmpty else { return }
         let barHeight = min(rect.h, tabBar.measure(proposed: ProposedSize(width: rect.w, height: rect.h)).h)
         tabBar.layout(in: Rect(x: rect.x, y: rect.y, w: rect.w, h: barHeight))
@@ -168,7 +158,9 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNod
     }
 
     func restoreSelection(from index: Int) {
-        guard !usesExternalSelection, pages.indices.contains(index) else { return }
+        guard !usesExternalSelection,
+              pages.indices.contains(index),
+              index != selectedIndex else { return }
         updateSelection(to: index)
     }
 
@@ -180,12 +172,13 @@ private final class _TabViewLayoutNode: _ContainerLayoutNode, _FlexibleLayoutNod
     }
 }
 
-private final class _TabBarLayoutNode: _ContainerLayoutNode, _RenderableLayoutNode {
+private final class _TabBarLayoutNode: _LayoutContainerStorage, _ContainerLayoutable, _RenderableLayoutNode {
     private let labelCount: Int
+    private(set) var frame: Rect = .zero
 
-    init(labels: [any _LayoutNode], selectedIndex: Int) {
+    init(labels: [any _Layoutable], selectedIndex: Int) {
         labelCount = labels.count
-        var children: [any _LayoutNode] = []
+        var children: [any _Layoutable] = []
         for (index, label) in labels.enumerated() {
             if index > 0 { children.append(Text(" ")._makeLayoutNode()) }
             if index == selectedIndex {
@@ -203,15 +196,15 @@ private final class _TabBarLayoutNode: _ContainerLayoutNode, _RenderableLayoutNo
 
     /// A selected tab remains recognizable through brackets without color, and
     /// becomes a contiguous high-contrast badge in color-capable terminals.
-    private static func selected(_ node: any _LayoutNode) -> any _LayoutNode {
-        _EnvironmentNode(child: node) { environment in
+    private static func selected(_ node: any _Layoutable) -> any _Layoutable {
+        _makeEnvironmentLayoutNode(child: node) { environment in
             environment.foregroundColor = .black
             environment.backgroundColor = .brightCyan
             environment._isBold = true
         }
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         guard labelCount > 0 else { return .zero }
         let sizes = children.map { $0.measure(proposed: ProposedSize(width: nil, height: proposed.height)) }
         return Size(
@@ -220,8 +213,8 @@ private final class _TabBarLayoutNode: _ContainerLayoutNode, _RenderableLayoutNo
         )
     }
 
-    package override func layout(in rect: Rect) {
-        super.layout(in: rect)
+    package func layout(in rect: Rect) {
+        frame = rect
         var x = rect.x
         for child in children {
             let size = child.measure(proposed: ProposedSize(width: nil, height: rect.h))

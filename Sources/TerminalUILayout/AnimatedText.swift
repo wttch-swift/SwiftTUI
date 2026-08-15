@@ -6,7 +6,7 @@ import Foundation
 /// 帧索引由单调时钟计算，即使某次重绘延迟，也会直接追上当前时间对应的帧，
 /// 不会把延迟不断累积到后续动画中。
 extension AnimatedText: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         guard !frames.isEmpty else { return Text("")._makeLayoutNode() }
         let index = _TerminalAnimationClock.shared.frameIndex(
             count: frames.count,

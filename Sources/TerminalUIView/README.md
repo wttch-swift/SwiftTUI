@@ -9,9 +9,10 @@
 ## 主要 API
 
 - 组合：`View`、`ViewBuilder`、`AnyView`、`EmptyView`、`ViewModifier`。
-- 容器：`HStack`、`VStack`、`ZStack`、`GroupBox`、`ScrollView`、`TabView`。
+- 容器：`HStack`、`VStack`、`LazyVStack`、`ZStack`、`GroupBox`、`ScrollView`、`TabView`。
 - 基础视图：`Text`、`Spacer`、`ProgressBar`、`Toggle`、`TextField`。
 - 数据视图：`ForEach`、`Table`、`TableColumn`、`GeometryReader`。
+- 身份：`View.id(_:)`，以及 `ForEach`、`LazyVStack` 的数据 ID 会保留到布局节点。
 - 状态：`State`、`Binding`、`FocusState`。
 - 交互：`KeyPress`、`onKeyPress`、`focused`、`sheet`、`toast`。
 - Modifier：`frame`、`padding`、`background`、`bordered`、颜色、焦点效果、
@@ -70,4 +71,3 @@ EnvironmentKey。
 基础 View 应只保存不可变配置、Binding 或必要的持久状态引用，不应导入 Core、
 Layout、Render。新增类型后，在 `TerminalUILayout` 中实现对应适配和节点。若功能
 可由已有 View 组合表达，优先实现 `body`，无需新增布局节点。
-

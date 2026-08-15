@@ -4,24 +4,36 @@
 /// 决定较矮子节点在容器高度内的垂直位置。
 extension HStack: _LayoutNodeProducing {
     /// 为每个子视图创建节点，并交由水平布局节点完成测量和定位。
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _HStackLayoutNode(content: content, alignment: alignment)
     }
 }
 
-// MARK: - HStack
 
-private class _HStackLayoutNode: _ContainerLayoutNode {
+/// `HStack` 的布局节点。
+/// 它将子节点从左到右排列，宽度是所有子节点宽度之和，高度取最高子节点；
+///  `alignment` 决定较矮子节点在容器高度内的垂直位置。
+private class _HStackLayoutNode: _LayoutContainerStorage, _ContainerLayoutable {
+    /// 子节点的垂直对齐方式。
     let alignment: VerticalAlignment
 
+    /// 初始化一个水平布局节点。
+    /// - Parameters:
+    ///   - content: 子视图内容。
+    ///   - alignment: 子节点的垂直对齐方式。
     init<Content: View>(content: Content, alignment: VerticalAlignment) {
         self.alignment = alignment
-        super.init(content: content)
+        super.init(children: content._makeLayoutNodes())
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    /// 测量布局节点的大小。
+    /// - Parameter proposed: 父节点提供的建议尺寸。
+    /// - Returns: 布局节点的实际大小。
+    package func measure(proposed: ProposedSize) -> Size {
         let sizes = minimumSizes(proposed: proposed)
-        let flexibleWidth = children.contains { ($0 as? _FlexibleLayoutNode)?.expandsHorizontally == true }
+        let flexibleWidth = children.contains {
+            ($0 as? _FlexibleLayoutNode)?.expandsHorizontally == true 
+        }
         let natural = Size(
             w: flexibleWidth ? proposed.width ?? sizes.reduce(0) { $0 + $1.w } : sizes.reduce(0) { $0 + $1.w },
             h: sizes.map(\.h).max() ?? 0
@@ -32,10 +44,9 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
         )
     }
 
-    package override func layout(in rect: Rect) {
-        super.layout(in: rect)
-        var sizes = minimumSizes(proposed: ProposedSize(width: rect.w, height: rect.h))
-        let remainingWidth = rect.w - sizes.reduce(0) { $0 + $1.w }
+    package func layout(in rect: Rect) {
+        var sizes = minimumSizes(proposed: .init(rect.size))
+        let remainingWidth = rect.w - sizes.totalWidth
         if remainingWidth >= 0 {
             distributeExtraWidth(remainingWidth, into: &sizes)
         } else {
@@ -58,10 +69,16 @@ private class _HStackLayoutNode: _ContainerLayoutNode {
         }
     }
 
+    /// 计算每个子节点的最小尺寸。
+    /// - Parameter proposed: 父节点提供的建议尺寸。
+    /// - Returns: 每个子节点的最小尺寸数组。
     private func minimumSizes(proposed: ProposedSize) -> [Size] {
         children.map { child in
             let flexible = child as? _FlexibleLayoutNode
             return child.measure(proposed: ProposedSize(
+                // 如果子节点是弹性布局节点，则不限制其在该方向上的尺寸；
+                // 否则使用父节点提供的建议尺寸。
+                // 如果父节点没有提供建议尺寸，则使用最大尺寸。
                 width: flexible?.expandsHorizontally == true ? nil : proposed.width ?? Int.max,
                 height: flexible?.expandsVertically == true ? nil : proposed.height ?? Int.max
             ))

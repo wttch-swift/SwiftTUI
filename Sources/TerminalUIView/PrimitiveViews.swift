@@ -1,9 +1,3 @@
-/// 在终端画布上显示纯文本的基础视图。
-public struct Text: View, _NeverView {
-    public let text: String
-
-    public init(_ text: String) { self.text = text }
-}
 
 /// 只参与布局、不直接产生可见内容的弹性空白。
 public struct Spacer: View, _NeverView {
@@ -49,44 +43,5 @@ public final class Toggle: View, _NeverView {
     public init(_ title: String, isOn: Binding<Bool>) {
         self.title = title
         self.isOn = isOn
-    }
-}
-
-public extension View {
-    func bold(_ isActive: Bool = true) -> some View {
-        environment(\._isBold, isActive)
-    }
-
-    func italic(_ isActive: Bool = true) -> some View {
-        environment(\._isItalic, isActive)
-    }
-
-    func underline(_ isActive: Bool = true) -> some View {
-        environment(\._isUnderline, isActive)
-    }
-
-    func strikethrough(_ isActive: Bool = true) -> some View {
-        environment(\._isStrikethrough, isActive)
-    }
-
-    func lineLimit(_ limit: Int, reservesSpace: Bool = false) -> some View {
-        modifier(_LineLimitModifier(limit: limit, reservesSpace: reservesSpace))
-    }
-}
-
-package struct _LineLimitModifier: ViewModifier {
-    package let limit: Int
-    package let reservesSpace: Bool
-
-    package func body(content: Content) -> some View {
-        if !reservesSpace {
-            return content.environment(\.lineLimit, limit).eraseToAnyView()
-        }
-        return VStack {
-            content.environment(\.lineLimit, limit)
-            Spacer()
-        }
-        .frame(height: limit)
-        .eraseToAnyView()
     }
 }

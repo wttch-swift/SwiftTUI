@@ -32,6 +32,12 @@ public struct Size: Equatable, Hashable, Sendable {
     }
 }
 
+/// 统计数组中所有尺寸的扩展函数。
+public extension Array where Element == Size {
+    var totalWidth: Int { reduce(0) { $0 + $1.w } }
+    var maxHeight: Int { map(\.h).max() ?? 0 }
+}
+
 public extension Size {
     static let zero = Size(w: 0, h: 0)
 }
@@ -62,6 +68,13 @@ public struct Rect: Equatable, Hashable, Sendable {
         self.w = w
         self.h = h
     }
+}
+
+public extension Rect {
+    /// 返回矩形的原点。
+    var origin: Offset { Offset(x: x, y: y) }
+    /// 返回矩形的尺寸。
+    var size: Size { Size(w: w, h: h) }
 }
 
 public extension Rect {

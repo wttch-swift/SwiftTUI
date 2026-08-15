@@ -1,8 +1,8 @@
 import TerminalUIView
 
 extension _PaddingLayoutView: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
-        _PaddingLayoutNode(
+    package func _makeLayoutNode() -> any _Layoutable {
+        _makePaddingLayoutNode(
             child: content._makeLayoutNode(),
             top: top,
             right: right,
@@ -13,8 +13,8 @@ extension _PaddingLayoutView: _LayoutNodeProducing {
 }
 
 extension _FrameLayoutView: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
-        _FrameLayoutNode(
+    package func _makeLayoutNode() -> any _Layoutable {
+        _makeFrameLayoutNode(
             child: content._makeLayoutNode(),
             width: width,
             height: height,
@@ -24,13 +24,13 @@ extension _FrameLayoutView: _LayoutNodeProducing {
 }
 
 extension _BorderContent: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _BorderLayoutNode(child: content._makeLayoutNode(), color: color, style: style)
     }
 }
 
 extension _Background: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _BackgroundLayoutNode(
             content: content._makeLayoutNode(),
             background: background._makeLayoutNode(),
@@ -39,17 +39,18 @@ extension _Background: _LayoutNodeProducing {
     }
 }
 
-private final class _BorderLayoutNode: _UnaryLayoutNode, _RenderableLayoutNode {
+private final class _BorderLayoutNode: _LayoutContainerStorage, _RenderableLayoutNode, _UnaryLayoutable {
     let color: Color
     let style: BorderStyle
+    private(set) var frame: Rect = .zero
 
-    init(child: any _LayoutNode, color: Color, style: BorderStyle) {
+    init(child: any _Layoutable, color: Color, style: BorderStyle) {
         self.color = color
         self.style = style
-        super.init(child: child)
+        super.init(children: [child])
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         let childSize = child.measure(proposed: proposed)
         let ideal = Size(w: max(3, childSize.w), h: max(3, childSize.h))
         return Size(
@@ -58,7 +59,7 @@ private final class _BorderLayoutNode: _UnaryLayoutNode, _RenderableLayoutNode {
         )
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         frame = rect
         child.layout(
             in: Rect(
@@ -83,12 +84,12 @@ private final class _BorderLayoutNode: _UnaryLayoutNode, _RenderableLayoutNode {
     }
 }
 
-private final class _BackgroundLayoutNode: _ContainerLayoutNode {
-    private let content: any _LayoutNode
-    private let background: any _LayoutNode
+private final class _BackgroundLayoutNode: _LayoutContainerStorage, _UnaryLayoutable {
+    private let content: any _Layoutable
+    private let background: any _Layoutable
     private let alignment: AlignmentEdge
 
-    init(content: any _LayoutNode, background: any _LayoutNode, alignment: AlignmentEdge) {
+    init(content: any _Layoutable, background: any _Layoutable, alignment: AlignmentEdge) {
         self.content = content
         self.background = background
         self.alignment = alignment
@@ -96,11 +97,11 @@ private final class _BackgroundLayoutNode: _ContainerLayoutNode {
         super.init(children: [background, content])
     }
 
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         content.measure(proposed: proposed)
     }
 
-    package override func layout(in rect: Rect) {
+    package func layout(in rect: Rect) {
         let backgroundSize = background.measure(
             proposed: ProposedSize(width: rect.w, height: rect.h)
         )

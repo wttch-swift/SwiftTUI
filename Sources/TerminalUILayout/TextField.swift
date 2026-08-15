@@ -3,7 +3,7 @@
 /// 使用 Tab 和 Shift-Tab 在多个输入控件之间切换焦点。光标移动和删除
 /// 以 Swift `Character` 为单位，不会拆分中文、emoji 或组合字符。
 extension TextField: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _TextFieldLayoutNode(
             title: title,
             text: text,
@@ -15,7 +15,7 @@ extension TextField: _LayoutNodeProducing {
 }
 
 /// 可以被 FocusState 包装的内部交互目标；目标本身不一定自动加入 Tab 顺序。
-package protocol _FocusTargetLayoutNode: _LayoutNode {
+package protocol _FocusTargetLayoutNode: _Layoutable {
     /// 当前节点是否接收由 `TerminalApp` 定向派发的键盘事件。
     var isFocused: Bool { get }
 

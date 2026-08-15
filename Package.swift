@@ -4,8 +4,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "ShengjiCmd",
-    platforms: [.macOS(.v14)],
+    name: "TUIDemo",
+    platforms: [
+        .macOS(.v14),
+    ],
     products: [
         // 命令行 SwiftUI 引擎
         .library(name: "TerminalUI", targets: ["TerminalUI"]),
@@ -14,6 +16,12 @@ let package = Package(
         // 公共值类型，不依赖渲染器或声明式 View。
         .target(
             name: "TerminalUIFoundation",
+            exclude: ["README.md"]
+        ),
+
+        // 最小 Combine 反应式核心，不依赖任何 TerminalUI target。
+        .target(
+            name: "WttchCombine",
             exclude: ["README.md"]
         ),
 
@@ -57,6 +65,7 @@ let package = Package(
             name: "TerminalUI",
             dependencies: [
                 "TerminalUIFoundation",
+                "WttchCombine",
                 "TerminalUICore",
                 "TerminalUIView",
                 "TerminalUILayout",
@@ -66,12 +75,12 @@ let package = Package(
         ),
 
         .executableTarget(
-            name: "ShengjiCmd",
+            name: "TUIDemo",
             dependencies: ["TerminalUI"],
             exclude: ["README.md"]
         ),
         .testTarget(
-            name: "ShengjiCmdTests",
+            name: "TUIDemoTests",
             dependencies: [
                 "TerminalUI",
                 "TerminalUICore",

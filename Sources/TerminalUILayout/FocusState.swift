@@ -1,7 +1,7 @@
 import TerminalUIView
 
 extension _FocusedView: _LayoutNodeProducing {
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         let child = content._makeLayoutNode()
         guard let focusable = _firstFocusTargetNode(in: child) else { return child }
         focusable.focusBindingDidAttach()
@@ -19,7 +19,7 @@ package protocol _FocusBindingLayoutNode: _FocusableLayoutNode {
     var requestsFocus: Bool { get }
 }
 
-private final class _FocusedLayoutNode: _UnaryLayoutNode, _FocusBindingLayoutNode,
+private final class _FocusedLayoutNode: _LayoutContainerStorage, _PassthroughUnaryLayoutable, _FocusBindingLayoutNode,
     _FlexibleLayoutNode {
     let focusable: any _FocusTargetLayoutNode
     let readFocus: () -> Bool
@@ -35,7 +35,7 @@ private final class _FocusedLayoutNode: _UnaryLayoutNode, _FocusBindingLayoutNod
     }
 
     init(
-        child: any _LayoutNode,
+        child: any _Layoutable,
         focusable: any _FocusTargetLayoutNode,
         requestsFocus: @escaping () -> Bool,
         updateFocus: @escaping (Bool) -> Void
@@ -43,15 +43,7 @@ private final class _FocusedLayoutNode: _UnaryLayoutNode, _FocusBindingLayoutNod
         self.focusable = focusable
         self.readFocus = requestsFocus
         self.updateFocus = updateFocus
-        super.init(child: child)
-    }
-
-    package override func measure(proposed: ProposedSize) -> Size {
-        child.measure(proposed: proposed)
-    }
-
-    package override func layout(in rect: Rect) {
-        child.layout(in: rect)
+        super.init(children: [child])
     }
 
     func setFocused(_ focused: Bool) {
@@ -69,9 +61,9 @@ private final class _FocusedLayoutNode: _UnaryLayoutNode, _FocusBindingLayoutNod
     }
 }
 
-private func _firstFocusTargetNode(in node: any _LayoutNode) -> (any _FocusTargetLayoutNode)? {
+private func _firstFocusTargetNode(in node: any _Layoutable) -> (any _FocusTargetLayoutNode)? {
     if let focusable = node as? any _FocusTargetLayoutNode { return focusable }
-    guard let container = node as? _ContainerLayoutNode else { return nil }
+    guard let container = node as? any _ContainerLayoutable else { return nil }
     let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
         ?? container.children
     for child in children {
@@ -84,11 +76,11 @@ private func _firstFocusTargetNode(in node: any _LayoutNode) -> (any _FocusTarge
 ///
 /// 通用边框通过这个查询实现一致的默认焦点效果。遇到 FocusState 包装节点时
 /// 直接读取包装节点即可；不再向内递归，避免同一个目标被重复解释。
-package func _containsFocusedTarget(in node: any _LayoutNode) -> Bool {
+package func _containsFocusedTarget(in node: any _Layoutable) -> Bool {
     if let focusable = node as? any _FocusTargetLayoutNode {
         return focusable.isFocused
     }
-    guard let container = node as? _ContainerLayoutNode else { return false }
+    guard let container = node as? any _ContainerLayoutable else { return false }
     let children = (node as? any _FocusScopeLayoutNode)?.focusScopeChildren
         ?? container.children
     return children.contains(where: _containsFocusedTarget)
@@ -96,18 +88,18 @@ package func _containsFocusedTarget(in node: any _LayoutNode) -> Bool {
 
 /// 允许 background 中的装饰节点观察其对应前景内容的焦点状态。
 package protocol _FocusEffectSourceLayoutNode: AnyObject {
-    var focusEffectSource: (any _LayoutNode)? { get set }
+    var focusEffectSource: (any _Layoutable)? { get set }
 }
 
 /// 把前景内容连接到背景子树里所有支持焦点效果的装饰节点。
 package func _attachFocusEffectSource(
-    _ source: any _LayoutNode,
-    to node: any _LayoutNode
+    _ source: any _Layoutable,
+    to node: any _Layoutable
 ) {
     if let effect = node as? any _FocusEffectSourceLayoutNode {
         effect.focusEffectSource = source
     }
-    guard let container = node as? _ContainerLayoutNode else { return }
+    guard let container = node as? any _ContainerLayoutable else { return }
     for child in container.children {
         _attachFocusEffectSource(source, to: child)
     }

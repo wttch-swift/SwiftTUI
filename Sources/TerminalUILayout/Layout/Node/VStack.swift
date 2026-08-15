@@ -11,19 +11,19 @@
 /// - `alignment` 决定较窄子节点在容器宽度内的水平位置。
 extension VStack: _LayoutNodeProducing {
     /// 构造负责纵向测量与定位的布局节点。
-    package func _makeLayoutNode() -> any _LayoutNode {
+    package func _makeLayoutNode() -> any _Layoutable {
         _VStackLayoutNode(content: content, alignment: alignment)
     }
 }
 
 
-final class _VStackLayoutNode: _ContainerLayoutNode {
+private final class _VStackLayoutNode: _LayoutContainerStorage, _ContainerLayoutable {
     /// 子节点在水平方向上的对齐方式。
     let alignment: HorizontalAlignment
 
     init<Content: View>(content: Content, alignment: HorizontalAlignment) {
         self.alignment = alignment
-        super.init(content: content)
+        super.init(children: content._makeLayoutNodes())
     }
 
     /// 计算当前节点在父节点给定尺寸建议下希望占用的尺寸。
@@ -35,7 +35,7 @@ final class _VStackLayoutNode: _ContainerLayoutNode {
     /// 如果包含纵向可伸缩节点，VStack 的理想高度优先采用父节点建议高度，
     /// 这样 `Spacer()` 才能把容器撑满；否则高度就是所有子节点高度之和。
     /// 最终结果仍会被 proposal 截断，保证测量结果不越过父布局的约束。
-    package override func measure(proposed: ProposedSize) -> Size {
+    package func measure(proposed: ProposedSize) -> Size {
         let sizes = minimumSizes(proposed: proposed)
         let flexibleHeight = children.contains { ($0 as? _FlexibleLayoutNode)?.expandsVertically == true }
         let natural = Size(
@@ -58,8 +58,7 @@ final class _VStackLayoutNode: _ContainerLayoutNode {
     ///
     /// 第 2 步会在定位前完成，因此所有子节点高度之和不会超过 `rect.h`，
     /// 后面的子节点不会再因为顺序截断而意外得到零高度。
-    package override func layout(in rect: Rect) {
-        super.layout(in: rect)
+    package func layout(in rect: Rect) {
         var sizes = minimumSizes(proposed: ProposedSize(width: rect.w, height: rect.h))
         let remainingHeight = rect.h - sizes.reduce(0) { $0 + $1.h }
         if remainingHeight >= 0 {
