@@ -20,6 +20,7 @@ TerminalUI 是一个使用 Swift 编写的声明式终端 UI 实验框架。它�
 ```mermaid
 flowchart TD
     Foundation[TerminalUIFoundation\n值类型与字符宽度]
+    Combine[WttchCombine\n最小 Combine 反应式库]
     Core[TerminalUICore\nCanvas 与 Cell]
     View[TerminalUIView\n声明式 View API]
     Layout[TerminalUILayout\nView 适配与布局树]
@@ -36,6 +37,7 @@ flowchart TD
     Core --> Render
     View --> Render
     Layout --> Render
+    Combine --> Facade
     Foundation --> Facade
     Core --> Facade
     View --> Facade
@@ -45,8 +47,8 @@ flowchart TD
 ```
 
 图中 `A --> B` 表示 **B 直接依赖 A**，也就是依赖从底层流向上层，源码导入方向
-与箭头相反。`TerminalUIFoundation` 是唯一没有内部依赖的基础 target；客户端入口
-位于最上层的 `TerminalUI`。
+与箭头相反。`TerminalUIFoundation` 与 `WttchCombine` 是没有内部依赖的叶子 target；
+客户端入口位于最上层的 `TerminalUI`。
 
 ## Package 依赖关系
 
@@ -55,6 +57,7 @@ flowchart TD
 | Target | 直接依赖 | 类型与可见性 |
 | --- | --- | --- |
 | `TerminalUIFoundation` | 无 | 基础 target，不单独发布 product |
+| `WttchCombine` | 无 | 最小 Combine 反应式库，由 `TerminalUI` 使用 |
 | `TerminalUICore` | `TerminalUIFoundation` | package 内部渲染基础设施 |
 | `TerminalUIView` | `TerminalUIFoundation` | 公共声明 API，由 `TerminalUI` 重新导出 |
 | `TerminalUILayout` | `TerminalUIFoundation`、`TerminalUICore`、`TerminalUIView` | package 内部布局实现 |
@@ -72,6 +75,7 @@ Core 也不会导入 View。二者第一次汇合于 `TerminalUILayout`，随后
 维护依赖时应遵循以下约束：
 
 - Foundation 不得依赖其他 TerminalUI target。
+- WttchCombine 是无依赖叶子，不反向依赖任何 TerminalUI target。
 - Core 与 View 不得互相依赖。
 - Layout 可以依赖 Foundation、Core 和 View，但不得依赖 Render 或 TerminalUI。
 - Render 可以依赖下层实现，但不得反向依赖 TerminalUI 宿主。
@@ -180,6 +184,8 @@ try app.run()
   `ProgressBar` 和 `AnimatedText`。
 - 运行时：终端尺寸读取、按键解码、16 ms 事件轮询、信号/挂起恢复、
   状态触发重绘和差异输出。
+- 反应式：WttchCombine 最小 Publisher/Subject 与按键全局流
+  `TerminalKeyEvents.stream`，视图 `.onKeyPress` 的底层数据来源即该流。
 
 ## 开发与测试
 

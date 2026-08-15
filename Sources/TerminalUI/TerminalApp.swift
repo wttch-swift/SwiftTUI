@@ -2,6 +2,7 @@ import Foundation
 import TerminalUIFoundation
 import TerminalUILayout
 import TerminalUIRender
+import WttchCombine
 
 /// A one-way View → _Layoutable → Render → Canvas host.
 public final class _TerminalAppHost {
@@ -115,8 +116,12 @@ public final class _TerminalAppHost {
         let events = _TerminalAppEventQueue()
         TerminalStateRuntime.setEventHandler { events.push(.state($0)) }
         platform.startSignals { events.push(.terminal(.signal($0))) }
+        // 按键走 Combine:readKey 读到后 send 到全局流,宿主订阅该流再进事件队列,
+        // 让视图层 .onKeyPress 的数据来源就是 key stream,外部客户端也可订阅。
+        let keySubscription = TerminalKeyEvents.stream.sink { events.push(.terminal(.key($0))) }
 
         defer {
+            keySubscription.cancel()
             TerminalStateRuntime.setEventHandler(nil)
             platform.stopInput()
             leaveTerminalScreen(clearScreen: clearScreen)
@@ -188,7 +193,8 @@ public final class _TerminalAppHost {
             // 仍会休眠，不会产生忙等待。有待刷新的帧时，轮询只睡到下一帧时间点，
             // 让多次状态变化先进入缓冲，再在固定节奏上合并成一次绘制。
             if let key = try platform.readKey(timeoutMilliseconds: renderScheduler.pollTimeoutMilliseconds) {
-                events.push(.terminal(.key(key)))
+                // 按键只发到 Combine 全局流;宿主订阅会把键转进事件队列驱动分发。
+                TerminalKeyEvents.stream.send(key)
             }
 
             while let event = events.pop() {

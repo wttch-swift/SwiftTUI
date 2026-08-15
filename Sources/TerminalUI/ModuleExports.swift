@@ -1,5 +1,6 @@
 @_exported import TerminalUIFoundation
 @_exported import TerminalUIView
+@_exported import WttchCombine
 import TerminalUICore
 import TerminalUILayout
 import TerminalUIRender

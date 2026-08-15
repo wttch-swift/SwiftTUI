@@ -16,6 +16,12 @@ let package = Package(
             exclude: ["README.md"]
         ),
 
+        // 最小 Combine 反应式核心，不依赖任何 TerminalUI target。
+        .target(
+            name: "WttchCombine",
+            exclude: ["README.md"]
+        ),
+
         // 包内渲染实现。未声明为 product，外部客户端不能直接依赖。
         .target(
             name: "TerminalUICore",
@@ -56,6 +62,7 @@ let package = Package(
             name: "TerminalUI",
             dependencies: [
                 "TerminalUIFoundation",
+                "WttchCombine",
                 "TerminalUICore",
                 "TerminalUIView",
                 "TerminalUILayout",
