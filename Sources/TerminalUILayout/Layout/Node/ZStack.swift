@@ -43,12 +43,14 @@ private final class _ZStackLayoutNode: _LayoutContainerStorage, _ContainerLayout
 
     package func layout(in rect: Rect) {
         let sizes = children.map { child in
-            let measured = child.measure(
-                proposed: ProposedSize(width: rect.w, height: rect.h)
-            )
+            // 弹性子节点在对应方向上撑满容器，与 HStack/VStack 的扩展语义一致；
+            // 但 ZStack 仍对所有子节点传相同的 proposal（与
+            // zStackPassesTheSameProposalToFlexibleChildren 的约定保持一致）。
+            let flexible = child as? _FlexibleLayoutNode
+            let measured = child.measure(proposed: ProposedSize(width: rect.w, height: rect.h))
             return Size(
-                w: min(measured.w, rect.w),
-                h: min(measured.h, rect.h)
+                w: flexible?.expandsHorizontally == true ? rect.w : min(measured.w, rect.w),
+                h: flexible?.expandsVertically == true ? rect.h : min(measured.h, rect.h)
             )
         }
         for (i, size) in sizes.enumerated() {
