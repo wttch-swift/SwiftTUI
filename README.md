@@ -4,6 +4,10 @@
 [![Build (macOS)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/macos.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/macos.yml)
 [![Build (Windows)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/windows.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/windows.yml)
 
+[![Test (Ubuntu)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/test-ubuntu.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/test-ubuntu.yml)
+[![Test (macOS)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/test-macos.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/test-macos.yml)
+[![Test (Windows)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/test-windows.yml/badge.svg)](https://github.com/wttch-swift/SwiftTUI/actions/workflows/test-windows.yml)
+
 TerminalUI 是一个使用 Swift 编写的声明式终端 UI 实验框架。它借鉴 SwiftUI 的
 `View`、`ViewBuilder`、`State`、`Binding`、`FocusState` 和 modifier 组合方式，
 但最终把界面布局到终端字符单元格，并通过 ANSI 控制序列增量输出。
