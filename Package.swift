@@ -89,6 +89,12 @@ let package = Package(
                 "TerminalUIRender",
             ]
         ),
+
+        // WttchCombine 反应式核心的单元测试。
+        .testTarget(
+            name: "WttchCombineTests",
+            dependencies: ["WttchCombine"]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
